@@ -310,6 +310,13 @@ struct NotchView: View {
             .padding(.top, geometry.headerTopInset)
             .padding(.bottom, NotchLayout.bottomInset)
             .frame(width: service.expandedSize.width, height: service.expandedSize.height, alignment: .top)
+            .overlay(alignment: .bottom) {
+                if service.heldOpen || service.pinned {
+                    NotchPinnedIndicator(sticky: service.pinned) { service.releaseHeldOpen() }
+                        .transition(.opacity)
+                }
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: service.heldOpen || service.pinned)
             .contentShape(Rectangle())
             .contextMenu { islandMenu }
             // Opening the island makes its panel key, so Keyboard navigation would ring
@@ -607,6 +614,31 @@ struct NotchView: View {
 }
 
 /// Observes the history on its own, so a new capture does not redraw the island.
+/// Shows that the island is pinned open: it stays without the pointer and
+/// closes on a click here, on its top strip, on a click away, or on Escape.
+struct NotchPinnedIndicator: View {
+    /// Pinned from the island's menu, which also survives clicks away.
+    var sticky: Bool
+    var release: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: release) {
+            Image(systemName: "pin.fill")
+                .font(.system(size: 8, weight: .semibold))
+                .rotationEffect(.degrees(45))
+                .foregroundStyle(.white.opacity(hovering ? 0.85 : (sticky ? 0.6 : 0.38)))
+                .frame(width: 28, height: 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Pinned open. Click to close.")
+        .accessibilityLabel("Unpin and close")
+        .padding(.bottom, 1)
+    }
+}
+
 struct NotchClearCapturesButton: View {
     @ObservedObject private var history = RecentCaptureService.shared
     @ObservedObject private var l10n = L10n.shared

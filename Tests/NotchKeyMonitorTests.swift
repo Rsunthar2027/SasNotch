@@ -68,6 +68,11 @@ enum NotchKeyMonitorTests {
     class State {
         var eventMonitors: [Any] = []
         var clickedSinceOpening = false
+        var heldByCurrentClick = false
+        var expanded = false
+        var openedByHover = false
+        var heldClicks = 0
+        func holdOpenAfterClick() { heldClicks += 1; openedByHover = false; heldByCurrentClick = true }
         var showsKeyboardFocus = false
         var keepsWorkingSurface = false
         let panel: Panel? = Panel()

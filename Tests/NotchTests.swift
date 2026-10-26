@@ -1891,9 +1891,9 @@ enum NotchTests {
         suite.expect(fresh.string(forKey: DefaultsKey.notchSize) == NotchSize.spacious.rawValue
                      && !fresh.bool(forKey: DefaultsKey.notchInitialExtensionsInstalled)
                      && firstDefaults[DefaultsKey.notchSize] as? String == NotchSize.spacious.rawValue
-                     && firstDefaults[DefaultsKey.notchOpenOnHover] as? Bool == false
+                     && firstDefaults[DefaultsKey.notchOpenOnHover] as? Bool == true
                      && firstDefaults[DefaultsKey.notchAppPanel] as? Bool == false,
-                     "a first island setup starts spacious, opens by click and uses a separate app panel")
+                     "a first island setup starts spacious, opens on hover and uses a separate app panel")
         suite.expect(firstDefaults[DefaultsKey.notchGesturesEnabled] as? Bool == true
                      && firstDefaults[DefaultsKey.notchHapticFeedback] as? Bool == true
                      && firstDefaults[DefaultsKey.notchReturnHome] as? Bool == false
@@ -2034,6 +2034,7 @@ enum NotchTests {
         defaults.set(true, forKey: DefaultsKey.notchShowInCaptures)
         suite.expect(!NotchSupport.hidesUntilHover(in: defaults), "the closed island stays in sight by default")
         defaults.set(true, forKey: DefaultsKey.notchHideUntilHover)
+        defaults.set(false, forKey: DefaultsKey.notchOpenOnHover)
         suite.expect(!NotchSupport.hidesUntilHover(in: defaults), "click to open does not hide the island until hover")
         defaults.set(true, forKey: DefaultsKey.notchOpenOnHover)
         suite.expect(NotchSupport.hidesUntilHover(in: defaults), "hidden until hover waits out of sight for the pointer")
@@ -2048,6 +2049,7 @@ enum NotchTests {
         defaults.set(false, forKey: DefaultsKey.notchHiddenShowsActivity)
         defaults.set(false, forKey: DefaultsKey.notchOpenOnHover)
         suite.expect(!NotchSupport.hidesUntilHover(in: defaults), "an island that opens by click never waits for hover")
+        defaults.set(Defaults.registeredDefaults[DefaultsKey.notchOpenOnHover], forKey: DefaultsKey.notchOpenOnHover)
         defaults.set(false, forKey: DefaultsKey.notchHideUntilHover)
         suite.expect(NotchEvent.allCases.allSatisfy { !NotchSupport.routes($0, in: defaults) },
                "disabled notch cannot consume any existing presentation")
@@ -2065,21 +2067,21 @@ enum NotchTests {
         suite.expect(NotchSupport.usesHapticFeedback(in: defaults), "disabling the notch preserves the user's tactile preference")
         suite.expect(NotchSupport.idleContent(in: defaults) == .music, "a new island shows playing music at rest")
         suite.expect(defaults.string(forKey: DefaultsKey.notchSize) == NotchSize.spacious.rawValue
-               && !defaults.bool(forKey: DefaultsKey.notchOpenOnHover),
-               "a new island starts spacious and opens by click")
+               && defaults.bool(forKey: DefaultsKey.notchOpenOnHover),
+               "a new island starts spacious and opens on hover")
         suite.expect(!defaults.bool(forKey: DefaultsKey.notchHideUntilHover), "hidden hover is opt-in")
         suite.expect(!defaults.bool(forKey: DefaultsKey.notchOutlineEnabled), "the island outline is opt-in")
         suite.expect(!defaults.bool(forKey: DefaultsKey.notchHideMenuBarGap),
                      "the island matches the physical notch's height unless covering the gap below it is chosen")
-        suite.expect(defaults.double(forKey: DefaultsKey.notchHoverDelay) == 0.25,
-               "hover activation defaults to a deliberate quarter-second pause")
+        suite.expect(defaults.double(forKey: DefaultsKey.notchHoverDelay) == 0.10,
+               "hover activation defaults to a near-immediate 100 ms")
         for value in [0.10, 0.25, 0.65, 1.0] {
             suite.expect(NotchSupport.sanitizedHoverDelay(value) == value, "valid hover activation times are preserved")
         }
-        suite.expect(NotchSupport.sanitizedHoverDelay(-1) == 0.10
+        suite.expect(NotchSupport.sanitizedHoverDelay(-1) == 0.0
                && NotchSupport.sanitizedHoverDelay(9) == 1.0,
                "hover activation times stay within usable bounds")
-        suite.expect([Double.nan, .infinity, -.infinity].allSatisfy { NotchSupport.sanitizedHoverDelay($0) == 0.25 },
+        suite.expect([Double.nan, .infinity, -.infinity].allSatisfy { NotchSupport.sanitizedHoverDelay($0) == 0.10 },
                "non-finite hover activation times fall back to the default")
         suite.expect(defaults.double(forKey: DefaultsKey.notchCloseDelay) == 0.18
                && NotchSupport.sanitizedCloseDelay(0.65) == 0.65

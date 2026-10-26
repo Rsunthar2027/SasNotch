@@ -207,6 +207,7 @@ enum NotchPresentationRefreshContract {
         }
         var selectedMetric: Bool?
         var expanded = true
+        var heldByCurrentClick = false
         var peeking = false, dragPlaceholder = false, compactActivityIsVisible = false
         var compactActivityOverride: NotchCompactActivity?
         var compactActivity: NotchCompactActivity? {

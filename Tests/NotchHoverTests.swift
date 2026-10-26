@@ -26,7 +26,9 @@ enum NotchHoverTests {
         static var standard = Preferences()
         struct Preferences {
             var enabled = true, expands = true, hides = false, fullscreenHover = false
-            var delay = NotchSupport.defaultHoverDelay
+            // The timing checks step around a quarter-second delay; the
+            // shipped default (NotchSupport.defaultHoverDelay) is checked in NotchTests.
+            var delay = 0.25
             var closeDelay = NotchSupport.defaultCloseDelay
             func bool(forKey key: String) -> Bool {
                 switch key {

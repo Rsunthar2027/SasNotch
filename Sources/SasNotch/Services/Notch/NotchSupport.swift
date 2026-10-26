@@ -1654,8 +1654,8 @@ enum NotchSupport {
     }
 
     static let toolColumns = 5
-    static let defaultHoverDelay = 0.25
-    static let hoverDelayRange = 0.10...1.0
+    static let defaultHoverDelay = 0.10
+    static let hoverDelayRange = 0.0...1.0
 
     /// Whether a screen point lies in a top-edge click area, whose top edge
     /// belongs to it as in the flipped native view.

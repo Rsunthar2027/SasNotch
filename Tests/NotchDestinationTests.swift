@@ -112,6 +112,7 @@ enum NotchDestinationContract {
         var peeking = false
         var pinned = false
         var openedByHover = false
+        var heldOpen = false
         var inside = false
         var notice: NotchNotice?
         var noticeExpanded = false

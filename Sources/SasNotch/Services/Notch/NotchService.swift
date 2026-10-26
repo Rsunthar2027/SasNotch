@@ -209,6 +209,13 @@ final class NotchService: ObservableObject {
     private var activityPickerMenuOpen = false
     private var hoverState = NotchHoverState()
     private var openedByHover = false
+    /// Open and staying open without the pointer: opened by a click, a
+    /// shortcut or the menu, or held by a click inside an island hover opened.
+    /// It closes on a click away, Escape, or another click on the island.
+    @Published private(set) var heldOpen = false
+    /// Set by the click that held a hover-opened island, so the same click's
+    /// release on the island's top strip holds it rather than closing it.
+    private var heldByCurrentClick = false
     /// A click inside the open island, which may be what brings another app forward.
     private var clickedSinceOpening = false
     /// Whether the open detail was reached from inside the island, so Escape
@@ -1451,6 +1458,7 @@ final class NotchService: ObservableObject {
             selectedMetric = metric
             peeking = false
             openedByHover = !takeFocus
+            heldOpen = takeFocus
             expanded = true
             // The open island covers a mirrored banner, and the inbox keeps
             // the message; a held one must not reappear after collapsing.
@@ -1477,6 +1485,7 @@ final class NotchService: ObservableObject {
             if noticeExpanded { notice = nil; noticeExpanded = false }
             expanded = false
             openedByHover = false
+            heldOpen = false
             peeking = false
             selectedMetric = nil
             showingAppPanel = false
@@ -1495,6 +1504,24 @@ final class NotchService: ObservableObject {
     }
 
     func toggle() { expanded ? collapse() : open() }
+
+    /// A click inside an island the pointer opened pins it: it stops closing
+    /// when the pointer leaves and takes the keyboard, so Escape closes it.
+    /// The click still reaches the control under it.
+    private func holdOpenAfterClick() {
+        openedByHover = false
+        heldByCurrentClick = true
+        hoverWork?.cancel(); hoverWork = nil
+        removeHoverExitMonitors()
+        mutatePresentation(transitionContent: .none) { self.heldOpen = true }
+        panel?.makeKey()
+    }
+
+    /// The pinned indicator's action: unpin and close.
+    func releaseHeldOpen() {
+        pinned = false
+        collapse()
+    }
 
     /// The island stays on screen, so only a manual resign takes its keyboard.
     /// While SasNotch stays the active app (its Settings window is open, for
@@ -2731,6 +2758,9 @@ final class NotchService: ObservableObject {
                 if !(self.geometry.floats && self.musicStripShowsControl) { self.hoverState.close(pointerInside: true) }
             }, activate: { [weak self] in
                 guard let self else { return }
+                // The click that just held a hover-opened island keeps it
+                // open; the next click on the strip closes it.
+                if self.heldByCurrentClick { self.heldByCurrentClick = false; return }
                 if self.captureControls != nil { self.expandCaptureControls() }
                 // The capsule's button covers its music bars too, which play or pause there.
                 else if self.geometry.floats, self.musicStripShowsControl { self.toggleMusicStripSong() }
@@ -3904,7 +3934,11 @@ final class NotchService: ObservableObject {
             }
             let click = clicks.contains(NSEvent.EventTypeMask(rawValue: 1 << event.type.rawValue))
             let islandWindow = self.ownsWindow(event.window)
-            if click, islandWindow { self.clickedSinceOpening = true }
+            if click, islandWindow {
+                self.clickedSinceOpening = true
+                self.heldByCurrentClick = false
+                if self.expanded, self.openedByHover { self.holdOpenAfterClick() }
+            }
             if click, !islandWindow, !self.keepsWorkingSurface,
                self.windowHost?.contains(NSEvent.mouseLocation) != true,
                (NSApp.delegate as? AppDelegate)?.isOverStatusItem(NSEvent.mouseLocation) != true,
