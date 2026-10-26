@@ -5,6 +5,18 @@
 import SwiftUI
 import EventKit
 
+/// Labels for the island shape card, added by SasNotch.
+enum IslandShapeText {
+    static let title = "Island shape"
+    static let closed = "At rest"
+    static let open = "Open"
+    static let extraWidth = "Width"
+    static let extraHeight = "Height"
+    static let cornerRadius = "Corners"
+    static let automatic = "Auto"
+    static let hint = "At rest the island always covers the camera; width and height only add to it. Moving the open island's width or height switches its size to Custom."
+}
+
 struct NotchSettings: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var features = FeatureRuntime.shared
@@ -86,12 +98,16 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchCustomWidth) private var customWidth = NotchSize.defaultWidth
     @AppStorage(DefaultsKey.notchCustomHeight) private var customHeight = NotchSize.defaultHeight
     @AppStorage(DefaultsKey.notchCameraFitWidth) private var cameraFitWidth = 0.0
+    @AppStorage(DefaultsKey.notchCompactExtraWidth) private var compactExtraWidth = 0.0
+    @AppStorage(DefaultsKey.notchCompactExtraHeight) private var compactExtraHeight = 0.0
+    @AppStorage(DefaultsKey.notchCompactCornerRadius) private var compactCornerRadius = NotchCornerRadius.automatic
+    @AppStorage(DefaultsKey.notchExpandedCornerRadius) private var expandedCornerRadius = NotchCornerRadius.automatic
     @AppStorage(DefaultsKey.notchCameraFitHeight) private var cameraFitHeight = 0.0
     @AppStorage(DefaultsKey.notchCapsuleFitWidth) private var capsuleFitWidth = 0.0
     @AppStorage(DefaultsKey.notchCapsuleFitHeight) private var capsuleFitHeight = 0.0
     @AppStorage(DefaultsKey.notchCapsuleFitDrop) private var capsuleFitDrop = 0.0
     @AppStorage(DefaultsKey.notchHapticFeedback) private var hapticFeedback = true
-    @AppStorage(DefaultsKey.notchTranslucentBackground) private var translucentBackground = false
+    @AppStorage(DefaultsKey.notchTranslucentBackground) private var translucentBackground = true
     @AppStorage(DefaultsKey.notchLiquidGlassEnabled) private var liquidGlass = false
     @AppStorage(DefaultsKey.notchShelf) private var shelfWindow = true
     @AppStorage(DefaultsKey.notchDragReveal) private var dragReveal = true
@@ -123,6 +139,7 @@ struct NotchSettings: View {
          String(timerEnabled), String(timerSoundEnabled), String(hideTimerCountdown),
          String(cameraEnabled), String(accessoriesEnabled), String(outlineEnabled), String(hideMenuBarGap),
          String(customWidth), String(customHeight), String(cameraFitWidth), String(cameraFitHeight),
+         String(compactExtraWidth), String(compactExtraHeight), String(compactCornerRadius), String(expandedCornerRadius),
          String(capsuleFitWidth), String(capsuleFitHeight), String(capsuleFitDrop), String(hapticFeedback),
          String(shelfWindow), String(dragReveal), String(captureControls), String(quickPanel), String(appPanel),
          String(hoverExpand), String(hideUntilHover), String(hiddenShowsActivity), String(hideInFullscreen),
@@ -236,14 +253,6 @@ struct NotchSettings: View {
                     choice(text.spacious, symbol: "rectangle.expand.vertical", selected: size == NotchSize.spacious.rawValue) { size = NotchSize.spacious.rawValue }
                     choice(text.custom, symbol: "arrow.up.left.and.arrow.down.right", selected: size == NotchSize.custom.rawValue) { size = NotchSize.custom.rawValue }
                 }
-                if size == NotchSize.custom.rawValue {
-                    // One grid starts both sliders at the same edge in every language.
-                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-                        dimensionSlider(text.width, value: $customWidth, range: NotchSize.widthRange, fallback: NotchSize.defaultWidth)
-                        dimensionSlider(text.maximumHeight, value: $customHeight, range: NotchSize.heightRange, fallback: NotchSize.defaultHeight)
-                    }
-                    Text(text.sizeHint).font(.caption).foregroundStyle(.secondary)
-                }
                 // Liquid Glass takes the open island's background when it is
                 // on and is already see-through, so the switch reads on and
                 // changes nothing then.
@@ -251,6 +260,29 @@ struct NotchSettings: View {
                           caption: liquidGlassIsOn ? text.translucentBackgroundGlassHint : text.translucentBackgroundHint,
                           isOn: liquidGlassIsOn ? .constant(true) : $translucentBackground)
                     .disabled(liquidGlassIsOn)
+            }
+            SettingsCard(title: IslandShapeText.title) {
+                Text(IslandShapeText.closed).font(.subheadline.weight(.semibold))
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                    shapeSlider(IslandShapeText.extraWidth, value: $compactExtraWidth,
+                                range: NotchCompactSize.widthRange, step: 2)
+                    shapeSlider(IslandShapeText.extraHeight, value: $compactExtraHeight,
+                                range: NotchCompactSize.heightRange, step: 1)
+                    radiusSlider(IslandShapeText.cornerRadius, value: $compactCornerRadius,
+                                 range: NotchCornerRadius.compactRange)
+                }
+                Text(IslandShapeText.open).font(.subheadline.weight(.semibold))
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                    // Width and height belong to the Custom size; moving them picks it.
+                    dimensionSlider(text.width, value: customizing($customWidth), range: NotchSize.widthRange,
+                                    fallback: NotchSize.defaultWidth)
+                    dimensionSlider(text.maximumHeight, value: customizing($customHeight), range: NotchSize.heightRange,
+                                    fallback: NotchSize.defaultHeight)
+                    radiusSlider(IslandShapeText.cornerRadius, value: $expandedCornerRadius,
+                                 range: NotchCornerRadius.expandedRange)
+                }
+                Text(IslandShapeText.hint).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             // Only a display without a camera can float the island.
             if NotchSupport.hasDisplayWithoutNotch {
@@ -1004,6 +1036,46 @@ struct NotchSettings: View {
             Text(title).fixedSize().accessibilityHidden(true)
             Slider(value: bounded, in: range, step: 10) { Text(title) }.labelsHidden()
             Text(Int(bounded.wrappedValue), format: .number)
+                .monospacedDigit().foregroundStyle(.secondary).frame(width: 38)
+        }
+    }
+
+    /// Moving an open-island dimension switches the island to the Custom size.
+    private func customizing(_ value: Binding<Double>) -> Binding<Double> {
+        Binding(get: { value.wrappedValue },
+                set: { value.wrappedValue = $0; size = NotchSize.custom.rawValue })
+    }
+
+    /// A size that only grows from zero, in points.
+    private func shapeSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>,
+                             step: Double) -> some View {
+        let bounded = Binding(get: { NotchSize.clamped(value.wrappedValue, to: range, fallback: 0) },
+                              set: { value.wrappedValue = NotchSize.clamped($0, to: range, fallback: 0) })
+        return GridRow {
+            Text(title).fixedSize().accessibilityHidden(true)
+            Slider(value: bounded, in: range, step: step) { Text(title) }.labelsHidden()
+            Text("+\(Int(bounded.wrappedValue))").monospacedDigit().foregroundStyle(.secondary).frame(width: 38)
+        }
+    }
+
+    /// A corner radius with an Automatic choice, which follows the island's height.
+    private func radiusSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
+        let automatic = value.wrappedValue < 0
+        let bounded = Binding(get: { automatic ? range.lowerBound : NotchSize.clamped(value.wrappedValue, to: range,
+                                                                                      fallback: range.lowerBound) },
+                              set: { value.wrappedValue = NotchSize.clamped($0, to: range, fallback: range.lowerBound) })
+        return GridRow {
+            Text(title).fixedSize().accessibilityHidden(true)
+            HStack(spacing: 8) {
+                Slider(value: bounded, in: range, step: 1) { Text(title) }.labelsHidden()
+                    .opacity(automatic ? 0.45 : 1)
+                Toggle(IslandShapeText.automatic, isOn: Binding(
+                    get: { value.wrappedValue < 0 },
+                    set: { value.wrappedValue = $0 ? NotchCornerRadius.automatic : range.lowerBound + 8 }))
+                    .toggleStyle(.checkbox)
+                    .fixedSize()
+            }
+            Text(automatic ? "–" : "\(Int(bounded.wrappedValue))")
                 .monospacedDigit().foregroundStyle(.secondary).frame(width: 38)
         }
     }

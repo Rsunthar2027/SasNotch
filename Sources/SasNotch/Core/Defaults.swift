@@ -826,6 +826,10 @@ enum DefaultsKey {
     static let notchCustomHeight = "notchCustomHeight"
     // Fits the island to one Mac's camera housing; never backed up.
     static let notchCameraFitWidth = "notchCameraFitWidth"
+    static let notchCompactExtraWidth = "notchCompactExtraWidth"
+    static let notchCompactExtraHeight = "notchCompactExtraHeight"
+    static let notchCompactCornerRadius = "notchCompactCornerRadius"
+    static let notchExpandedCornerRadius = "notchExpandedCornerRadius"
     static let notchCameraFitHeight = "notchCameraFitHeight"
     static let notchHapticFeedback = "notchHapticFeedback"
     static let notchTranslucentBackground = "notchTranslucentBackground"
@@ -1197,8 +1201,8 @@ enum Defaults {
 
     static let registeredDefaults: [String: Any] = [
         DefaultsKey.appearance: AppAppearance.fallback.rawValue,
-        DefaultsKey.liquidGlassEnabled: false,
-        DefaultsKey.notchLiquidGlassEnabled: false,
+        DefaultsKey.liquidGlassEnabled: true,
+        DefaultsKey.notchLiquidGlassEnabled: true,
         DefaultsKey.clamshellPreferred: false,
         DefaultsKey.dimScreenOnLidClose: false,
         DefaultsKey.defaultDuration: 0,
@@ -1433,9 +1437,13 @@ enum Defaults {
         DefaultsKey.notchCustomWidth: NotchSize.defaultWidth,
         DefaultsKey.notchCustomHeight: NotchSize.defaultHeight,
         DefaultsKey.notchCameraFitWidth: 0.0,
+        DefaultsKey.notchCompactExtraWidth: 0.0,
+        DefaultsKey.notchCompactExtraHeight: 0.0,
+        DefaultsKey.notchCompactCornerRadius: NotchCornerRadius.automatic,
+        DefaultsKey.notchExpandedCornerRadius: NotchCornerRadius.automatic,
         DefaultsKey.notchCameraFitHeight: 0.0,
         DefaultsKey.notchHapticFeedback: true,
-        DefaultsKey.notchTranslucentBackground: false,
+        DefaultsKey.notchTranslucentBackground: true,
         DefaultsKey.notchShelf: true,
         DefaultsKey.notchDragReveal: true,
         DefaultsKey.notchCaptureControls: true,
@@ -2047,7 +2055,7 @@ enum Defaults {
         guard let domainName else { return }
         let saved = defaults.persistentDomain(forName: domainName) ?? [:]
         guard saved[DefaultsKey.notchLiquidGlassEnabled] == nil else { return }
-        defaults.set(saved[DefaultsKey.liquidGlassEnabled] as? Bool ?? false,
+        defaults.set(saved[DefaultsKey.liquidGlassEnabled] as? Bool ?? true,
                      forKey: DefaultsKey.notchLiquidGlassEnabled)
     }
 

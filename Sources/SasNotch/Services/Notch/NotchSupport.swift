@@ -191,6 +191,46 @@ struct NotchCapsuleFit: Equatable {
     }
 }
 
+/// Extra size for the island at rest, chosen in Settings. It only ever grows
+/// the island, so a physical camera always stays covered.
+struct NotchCompactSize: Equatable {
+    static let widthRange = 0.0...160.0
+    static let heightRange = 0.0...12.0
+    static let zero = NotchCompactSize(width: 0, height: 0)
+
+    let width: CGFloat
+    let height: CGFloat
+
+    /// Even widths keep the island centred on the camera; heights are whole points.
+    init(width: Double, height: Double) {
+        self.width = (NotchSize.clamped(width, to: Self.widthRange, fallback: 0) / 2).rounded() * 2
+        self.height = NotchSize.clamped(height, to: Self.heightRange, fallback: 0).rounded()
+    }
+
+    static func current(in defaults: UserDefaults = .standard) -> NotchCompactSize {
+        NotchCompactSize(width: defaults.double(forKey: DefaultsKey.notchCompactExtraWidth),
+                         height: defaults.double(forKey: DefaultsKey.notchCompactExtraHeight))
+    }
+}
+
+/// Corner radii chosen in Settings for the island at rest and open. A
+/// negative value keeps the automatic radius, which follows the height.
+enum NotchCornerRadius {
+    static let automatic = -1.0
+    static let compactRange = 0.0...20.0
+    static let expandedRange = 8.0...48.0
+    /// Surfaces at least this tall are the open island.
+    static let expandedThreshold: CGFloat = 120
+
+    static func custom(forHeight height: CGFloat, in defaults: UserDefaults = .standard) -> CGFloat? {
+        let open = height >= expandedThreshold
+        let key = open ? DefaultsKey.notchExpandedCornerRadius : DefaultsKey.notchCompactCornerRadius
+        guard let value = defaults.object(forKey: key) as? Double, value.isFinite, value >= 0 else { return nil }
+        let range = open ? expandedRange : compactRange
+        return CGFloat(NotchSize.clamped(value, to: range, fallback: range.lowerBound))
+    }
+}
+
 /// How an open page uses the island's top row. The island names no page:
 /// the row holds the page's own controls, beside a physical camera when
 /// they fit there, as a phone's island wraps its camera.
@@ -378,7 +418,11 @@ enum NotchLayout {
     /// keeps the cutout's own corners, so the closed island and the last
     /// frames of a collapse sit inside the notch instead of outlining a
     /// rounder one; the open island reaches the full radius and shoulder.
-    static func surfaceRadius(height: CGFloat) -> CGFloat { min(28, height * 0.34) }
+    static func surfaceRadius(height: CGFloat) -> CGFloat {
+        let automatic = min(28, height * 0.34)
+        guard let custom = NotchCornerRadius.custom(forHeight: height) else { return automatic }
+        return min(custom, height / 2)
+    }
     static func shoulder(height: CGFloat) -> CGFloat { min(shoulder, height * 0.19) }
     /// The optional outline's stroke. Only its inner half, inside the island, shows.
     static let outlineWidth: CGFloat = 2
@@ -2273,7 +2317,8 @@ struct NotchGeometry: Equatable {
          menuBarHeight: CGFloat = 24, compactSideRoom: CGFloat? = nil,
          customWidth: Double = NotchSize.defaultWidth, customHeight: Double = NotchSize.defaultHeight,
          cameraFit: NotchCameraFit = .zero, silhouette: NotchSilhouette = .notch, capsuleFit: NotchCapsuleFit = .zero,
-         hideMenuBarGap: Bool = false, outline: Bool = false, barEdge: CGFloat = 0) {
+         hideMenuBarGap: Bool = false, outline: Bool = false, barEdge: CGFloat = 0,
+         compactSize: NotchCompactSize = .zero) {
         self.screen = screen
         self.layout = layout
         self.customWidth = NotchSize.clamped(customWidth, to: NotchSize.widthRange, fallback: NotchSize.defaultWidth)
@@ -2305,14 +2350,17 @@ struct NotchGeometry: Equatable {
         // A simulated cutout sits on the menu bar, where its outline already shows.
         let room = isNotched && outline ? NotchLayout.outlineWidth : 0
         outlineRoom = room
-        self.cameraWidth = min(isNotched ? max(0, cameraWidth + fit.width + room * 2)
-                               : gap == nil ? simulated : (simulated + capsuleFit.width).rounded(),
+        // The resting size chosen in Settings only adds width, so the island
+        // never ends inside a physical camera.
+        self.cameraWidth = min((isNotched ? max(0, cameraWidth + fit.width + room * 2)
+                               : gap == nil ? simulated : (simulated + capsuleFit.width).rounded())
+                               + compactSize.width,
                                screen.width * 0.7)
         if isNotched {
             // The menu bar can extend slightly below the camera's safe area.
             // Optionally cover its full height before applying a manual fit.
             let baseHeight = hideMenuBarGap ? max(safeAreaTop, barHeight) : safeAreaTop
-            cameraHeight = min(max(0, baseHeight + fit.height + room), 64)
+            cameraHeight = min(max(0, baseHeight + fit.height + room) + compactSize.height, 64)
         } else {
             cameraHeight = stripHeight
         }
