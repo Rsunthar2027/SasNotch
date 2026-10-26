@@ -14,8 +14,6 @@ let widthPt: CGFloat = 600, heightPt: CGFloat = 400
 let px = Int(widthPt * scale), py = Int(heightPt * scale)
 
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "dmg-background.png"
-let scriptDir = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
-let logoPath = scriptDir.deletingLastPathComponent().appendingPathComponent("Resources/Brand/logo.png").path
 
 guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: py,
                                  bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
@@ -30,26 +28,27 @@ ctx.cgContext.scaleBy(x: scale, y: scale)   // draw in points, output at 2×
 
 let full = NSRect(x: 0, y: 0, width: widthPt, height: heightPt)
 
-// Soft vertical gradient, light and neutral.
+// Soft vertical gradient in the icon's cream.
+let fur = NSColor(srgbRed: 0x5B / 255.0, green: 0x3A / 255.0, blue: 0x22 / 255.0, alpha: 1)
 NSGradient(colors: [
-    NSColor(calibratedWhite: 0.99, alpha: 1),
-    NSColor(calibratedWhite: 0.94, alpha: 1),
+    NSColor(srgbRed: 0.98, green: 0.95, blue: 0.90, alpha: 1),
+    NSColor(srgbRed: 0.95, green: 0.91, blue: 0.83, alpha: 1),
 ])?.draw(in: full, angle: -90)
 
 // Title (origin is bottom-left, so high y = near the top).
 let title = "SasNotch"
 let titleAttrs: [NSAttributedString.Key: Any] = [
     .font: NSFont.systemFont(ofSize: 26, weight: .bold),
-    .foregroundColor: NSColor(calibratedWhite: 0.12, alpha: 1),
+    .foregroundColor: fur,
 ]
 let titleSize = title.size(withAttributes: titleAttrs)
 title.draw(at: NSPoint(x: (widthPt - titleSize.width) / 2, y: heightPt - 70), withAttributes: titleAttrs)
 
 // Subtitle / instruction.
-let subtitle = "Arraste o app para a pasta Aplicativos · Drag the app to Applications"
+let subtitle = "Drag SasNotch to the Applications folder"
 let subAttrs: [NSAttributedString.Key: Any] = [
     .font: NSFont.systemFont(ofSize: 12, weight: .regular),
-    .foregroundColor: NSColor(calibratedWhite: 0.45, alpha: 1),
+    .foregroundColor: fur.withAlphaComponent(0.65),
 ]
 let subSize = subtitle.size(withAttributes: subAttrs)
 subtitle.draw(at: NSPoint(x: (widthPt - subSize.width) / 2, y: 54), withAttributes: subAttrs)
@@ -66,20 +65,10 @@ arrow.line(to: NSPoint(x: 348, y: arrowY))
 arrow.move(to: NSPoint(x: 330, y: arrowY + 16))
 arrow.line(to: NSPoint(x: 350, y: arrowY))
 arrow.line(to: NSPoint(x: 330, y: arrowY - 16))
-NSColor(calibratedRed: 0.40, green: 0.34, blue: 0.78, alpha: 0.9).setStroke()
+fur.withAlphaComponent(0.85).setStroke()
 arrow.stroke()
 
 NSGraphicsContext.restoreGraphicsState()
-
-// Embed the brand mark watermark faintly behind the title (optional, subtle).
-if let logo = NSImage(contentsOfFile: logoPath) {
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = ctx
-    ctx.cgContext.scaleBy(x: scale, y: scale)
-    let mark = NSRect(x: widthPt / 2 - 16, y: heightPt - 112, width: 32, height: 32)
-    logo.draw(in: mark, from: .zero, operation: .sourceOver, fraction: 0.12)
-    NSGraphicsContext.restoreGraphicsState()
-}
 
 guard let data = rep.representation(using: .png, properties: [:]) else { exit(1) }
 do {
