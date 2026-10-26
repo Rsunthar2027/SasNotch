@@ -15,10 +15,12 @@ cd "$(dirname "$0")"
 # the script ends.
 ICON_TMP=""
 STAGE_TMP=""
+SPARKLE_TMP=""
 
 cleanup() {
     [[ -n "$ICON_TMP" ]] && rm -rf "$ICON_TMP"
     [[ -n "$STAGE_TMP" ]] && rm -rf "$STAGE_TMP"
+    [[ -n "$SPARKLE_TMP" ]] && rm -rf "$SPARKLE_TMP"
     return 0
 }
 trap cleanup EXIT
@@ -81,7 +83,9 @@ legacy_identity_installed() {
     local probe signed=1
     # A locked keychain still lists its identities but cannot sign with them,
     # and this one is locked after every reboot; unlock it before asking.
-    security unlock-keychain -p sasnotch-signing \
+    local kcpass
+    kcpass="$(security find-generic-password -s "SasNotch signing keychain" -a "$USER" -w 2>/dev/null || true)"
+    [[ -n "$kcpass" ]] && security unlock-keychain -p "$kcpass" \
         "$HOME/Library/Keychains/sasnotch-signing.keychain-db" 2>/dev/null || true
     probe="$(mktemp)"
     cp /bin/echo "$probe"
@@ -159,6 +163,20 @@ finalize_installed_bundle_after_child() {
 
     echo "▸ Finalizing installed signature…"
     sleep 3
+    # Sparkle's nested helpers first, with the identity the app gets below.
+    local sparkle_identity="-" sparkle_options=() part
+    if [[ -n "$devid" ]]; then
+        sparkle_identity="$devid"; sparkle_options=(--options runtime --timestamp)
+    elif legacy_identity_installed; then
+        sparkle_identity="$LEGACY_IDENTITY"
+    fi
+    for part in "$bundle"/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/*.xpc(N) \
+                "$bundle/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate" \
+                "$bundle/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app" \
+                "$bundle/Contents/Frameworks/Sparkle.framework"; do
+        [[ -e "$part" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs "${sparkle_options[@]}" \
+            --sign "$sparkle_identity" "$part"
+    done
     if [[ -n "$devid" ]]; then
         [[ -f "$helper" ]] && codesign_with_timestamp_retry --force --strip-disallowed-xattrs \
             --options runtime --timestamp --identifier "$FAN_HELPER_ID" --sign "$devid" "$helper"
@@ -212,6 +230,34 @@ if [[ "$SDK" == "$PINNED_SDK" ]]; then
     # Swift 6.4 can read the SDK 26 interfaces when given their compiler version.
     SDK_COMPAT_FLAGS=(-Xfrontend -interface-compiler-version -Xfrontend 6.3.2)
 fi
+
+# Sparkle 2 delivers updates. The official release archive is fetched once,
+# checked against its published SHA-256, and kept outside build/ (which a
+# release build empties) in the git-ignored .vendor folder.
+SPARKLE_VERSION="2.10.0"
+SPARKLE_SHA256="c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c"
+SPARKLE_DIR=".vendor/Sparkle-$SPARKLE_VERSION"
+fetch_sparkle() {
+    [[ -d "$SPARKLE_DIR/Sparkle.framework" && -x "$SPARKLE_DIR/bin/sign_update" ]] && return 0
+    echo "▸ Fetching Sparkle $SPARKLE_VERSION…"
+    SPARKLE_TMP="$(mktemp -d)"
+    local archive="$SPARKLE_TMP/Sparkle-$SPARKLE_VERSION.tar.xz"
+    curl -fsSL --retry 3 -o "$archive" \
+        "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+    if ! echo "$SPARKLE_SHA256  $archive" | shasum -a 256 -c - >/dev/null; then
+        echo "✗ Sparkle archive checksum mismatch" >&2
+        exit 1
+    fi
+    rm -rf "$SPARKLE_DIR"
+    mkdir -p "$SPARKLE_DIR"
+    tar -xJf "$archive" -C "$SPARKLE_DIR"
+    rm -rf "$SPARKLE_TMP"
+    SPARKLE_TMP=""
+}
+# The bundle loads Sparkle from Contents/Frameworks; the bare binary in build/
+# (run by --selftest) finds it in .vendor through the second, relative path.
+SPARKLE_FLAGS=(-F "$SPARKLE_DIR" -framework Sparkle -Xlinker -rpath -Xlinker @executable_path/../Frameworks
+               -Xlinker -rpath -Xlinker "@executable_path/../$SPARKLE_DIR")
 
 # The defaults migrations under test need a real UserDefaults suite, and every
 # suite leaves an empty plist in ~/Library/Preferences. The tests already clear
@@ -597,6 +643,7 @@ if (( TEST )); then
     exit $test_status
 fi
 
+fetch_sparkle
 echo "▸ Compiling ($BUILD_CONFIGURATION) against $(basename "$SDK")…"
 APP_SOURCES=(Sources/SasNotch/**/*.swift)
 if (( ! DEV )); then
@@ -617,7 +664,7 @@ write_swift_output_file_map "$APP_OUTPUT_FILE_MAP" "$APP_OBJECT_DIR" "${APP_SOUR
 swiftc "${APP_OPTIMIZATION_FLAGS[@]}" -incremental -enable-batch-mode -j "$(sysctl -n hw.logicalcpu)" \
     -output-file-map "$APP_OUTPUT_FILE_MAP" \
     -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${HID_EVENT_SYSTEM_FLAGS[@]}" \
-    "${BUILD_VARIANT_FLAGS[@]}" \
+    "${BUILD_VARIANT_FLAGS[@]}" "${SPARKLE_FLAGS[@]}" \
     "${APP_SOURCES[@]}" -o "build/$EXECUTABLE"
 
 echo "▸ Compiling protected fan helper…"
@@ -653,11 +700,28 @@ cp "build/$EXECUTABLE" "$STAGE/Contents/MacOS/$EXECUTABLE"
 cp "build/$FAN_HELPER_ID" "$STAGE/Contents/Library/LaunchServices/$FAN_HELPER_ID"
 mkdir -p "$STAGE/Contents/Frameworks"
 cp "build/$NOW_PLAYING_ADAPTER" "$STAGE/Contents/Frameworks/$NOW_PLAYING_ADAPTER"
+ditto "$SPARKLE_DIR/Sparkle.framework" "$STAGE/Contents/Frameworks/Sparkle.framework"
 cp Resources/now-playing.pl "$STAGE/Contents/Resources/now-playing.pl"
 cp Resources/agent-prices.json "$STAGE/Contents/Resources/agent-prices.json"
 cp Resources/com.sasnotch.app.fan-control.plist \
     "$STAGE/Contents/Library/LaunchDaemons/$FAN_HELPER_ID.plist"
 cp Resources/Info.plist "$STAGE/Contents/Info.plist"
+# Release builds take their version from the tag and their update feed from
+# the repository they are published from; local builds keep Info.plist's.
+if [[ -n "${SASNOTCH_VERSION:-}" ]]; then
+    if [[ ! "$SASNOTCH_VERSION" =~ '^([0-9]+)\.([0-9]+)\.([0-9]+)$' ]]; then
+        echo "✗ SASNOTCH_VERSION must look like 1.2.3 (got $SASNOTCH_VERSION)" >&2
+        exit 1
+    fi
+    # Sparkle orders releases by the build number: 1.2.3 is 10203.
+    BUILD_NUMBER=$(( ${match[1]} * 10000 + ${match[2]} * 100 + ${match[3]} ))
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $SASNOTCH_VERSION" "$STAGE/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$STAGE/Contents/Info.plist"
+fi
+if [[ -n "${SASNOTCH_FEED_URL:-}" ]]; then
+    /usr/libexec/PlistBuddy -c "Delete :SUFeedURL" "$STAGE/Contents/Info.plist" 2>/dev/null || true
+    /usr/libexec/PlistBuddy -c "Add :SUFeedURL string $SASNOTCH_FEED_URL" "$STAGE/Contents/Info.plist"
+fi
 cp CHANGELOG.md "$STAGE/Contents/Resources/CHANGELOG.md"
 for lproj in Resources/*.lproj(N); do
     cp -R "$lproj" "$STAGE/Contents/Resources/"
@@ -749,6 +813,25 @@ codesign_now_playing_adapter() {
     fi
 }
 
+# Sparkle's helpers are signed inside out with the app's identity, so the
+# installer it launches carries the same signature as the app it replaces.
+codesign_sparkle() {
+    local framework="$1/Contents/Frameworks/Sparkle.framework"
+    [[ -d "$framework" ]] || return 0
+    local identity="-" options=()
+    if [[ -n "$DEVID" ]]; then
+        identity="$DEVID"; options=(--options runtime --timestamp)
+    elif legacy_identity_installed; then
+        identity="$LEGACY_IDENTITY"
+    fi
+    local part
+    for part in "$framework"/Versions/B/XPCServices/*.xpc(N) \
+                "$framework/Versions/B/Autoupdate" "$framework/Versions/B/Updater.app" "$framework"; do
+        [[ -e "$part" ]] || continue
+        codesign --force --strip-disallowed-xattrs "${options[@]}" --sign "$identity" "$part"
+    done
+}
+
 sign_bundle() {
     local bundle="$1"
     local executable="$bundle/Contents/MacOS/$EXECUTABLE"
@@ -764,6 +847,7 @@ sign_bundle() {
     fi
     [[ -f "$helper" ]] && codesign_fan_helper "$helper"
     [[ -f "$adapter" ]] && codesign_now_playing_adapter "$adapter"
+    codesign_sparkle "$bundle"
     codesign_app "$bundle"
 
     # If local filesystem metadata invalidates the first signature, sign once
@@ -773,6 +857,7 @@ sign_bundle() {
         xattr -c -r "$bundle" 2>/dev/null || true
         [[ -f "$helper" ]] && codesign_fan_helper "$helper"
         [[ -f "$adapter" ]] && codesign_now_playing_adapter "$adapter"
+        codesign_sparkle "$bundle"
         codesign_app "$bundle"
     fi
     [[ -f "$executable" ]] && codesign --verify --strict "$executable"

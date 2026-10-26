@@ -42,7 +42,11 @@ final class UpdateService: ObservableObject {
         get { UserDefaults.standard.object(forKey: DefaultsKey.autoCheckUpdates) as? Bool ?? true }
         set {
             UserDefaults.standard.set(newValue, forKey: DefaultsKey.autoCheckUpdates)
-            configureAutomaticChecks()
+            if SparkleUpdater.isConfigured {
+                SparkleUpdater.shared.start(automaticChecks: newValue)
+            } else {
+                configureAutomaticChecks()
+            }
         }
     }
 
@@ -60,8 +64,27 @@ final class UpdateService: ObservableObject {
 
     // MARK: - Scheduling
 
+    // MARK: - Sparkle
+
+    /// Sparkle finds, verifies and installs releases; this keeps the state the
+    /// menu bar badge and the island's update control read.
+    func sparkleFound(version: String) {
+        lastChecked = Date()
+        state = .available(version: version)
+        availableNotes = nil
+    }
+
+    func sparkleFoundNothing() {
+        lastChecked = Date()
+        if case .checking = state { state = .upToDate }
+    }
+
     /// Called at launch: checks shortly after start and then daily, if enabled.
     func startAutomaticChecks() {
+        if SparkleUpdater.isConfigured {
+            SparkleUpdater.shared.start(automaticChecks: autoCheckEnabled)
+            return
+        }
         consumeInstallResult()
         if AppInfo.isBeta && UserDefaults.standard.object(forKey: DefaultsKey.includeBetaUpdates) == nil {
             UserDefaults.standard.set(true, forKey: DefaultsKey.includeBetaUpdates)
@@ -101,6 +124,10 @@ final class UpdateService: ObservableObject {
     // MARK: - Check
 
     func check(manual: Bool) {
+        if SparkleUpdater.isConfigured || (!AppInfo.isDeveloperBuild && manual) {
+            if manual { SparkleUpdater.shared.checkForUpdates() } else { SparkleUpdater.shared.checkInBackground() }
+            return
+        }
         if AppInfo.isDeveloperBuild {
             // No real update target; reflect the simulation default so the
             // notification UI can be exercised locally.
@@ -194,117 +221,16 @@ final class UpdateService: ObservableObject {
     /// or the panel opens, so a new release surfaces promptly without hammering the
     /// API. The hourly timer is the floor; this makes it feel immediate.
     func checkIfStale(maxAge: TimeInterval = 15 * 60) {
-        if AppInfo.isDeveloperBuild { return }
-        guard autoCheckEnabled else { return }
-        switch state {
-        case .checking, .downloading, .installing: return
-        default: break
-        }
-        if let last = lastChecked, Date().timeIntervalSince(last) < maxAge { return }
-        check(manual: false)
+        // Sparkle keeps its own schedule; a build without a feed has nothing
+        // to check in the background.
     }
 
     // MARK: - Download & install
 
     func downloadAndInstall() {
-        if AppInfo.isDeveloperBuild { return }  // never replace the local dev build over itself
-        guard let downloadURL else { return }
-        // Pre-flight BEFORE spending the download: a translocated app or one
-        // running from a read-only volume (the mounted DMG) can never be
-        // replaced in place, so say so now instead of after the download.
-        if UpdateInstallerSupport.runsFromImmutableLocation(appPath: Bundle.main.bundlePath,
-                                                            volumeIsReadOnly: Self.volumeIsReadOnly) {
-            let s = L10n.shared.s
-            NSApp.activate(ignoringOtherApps: true)
-            let alert = NSAlert()
-            alert.messageText = s.updateNeedsApplicationsTitle
-            alert.informativeText = s.updateNeedsApplicationsBody
-            alert.runModal()
-            return
-        }
-        // Remember the offer so a failed download restores it (the user can retry)
-        // instead of dropping to a dead .failed state that hides the update and
-        // blocks checkIfStale for 15 min.
-        let offered: String?
-        if case let .available(version) = state { offered = version } else { offered = nil }
-        state = .downloading(progress: nil)
-
-        let expectedBytes = downloadExpectedBytes
-        let byteLimit = UpdateInstallerSupport.downloadByteLimit(expectedBytes: expectedBytes)
-        let delegate: BoundedUpdateDownloadDelegate
-        do {
-            delegate = try BoundedUpdateDownloadDelegate(
-                byteLimit: byteLimit,
-                progress: { [weak self] receivedBytes, responseExpectedBytes in
-                    let totalBytes = expectedBytes ?? responseExpectedBytes
-                    guard let totalBytes, totalBytes > 0 else { return }
-                    let fraction = min(Double(receivedBytes) / Double(totalBytes), 1)
-                    DispatchQueue.main.async {
-                        guard let self, case let .downloading(current) = self.state else { return }
-                        if UpdateInstallerSupport.progressStepAdvanced(from: current, to: fraction) {
-                            self.state = .downloading(progress: fraction)
-                        }
-                    }
-                },
-                completion: { [weak self] tempURL, response, error in
-                    guard let self else { return }
-                    self.downloadSession?.finishTasksAndInvalidate()
-                    DispatchQueue.main.async {
-                        self.downloadSession = nil
-                    }
-                    guard let tempURL, error == nil else {
-                        DispatchQueue.main.async {
-                            self.state = offered.map { State.available(version: $0) }
-                                ?? .failed(error?.localizedDescription ?? "-")
-                        }
-                        return
-                    }
-                    // A response that cannot be the asset is dropped here, before it is
-                    // moved out of the scratch space and mounted. The installer still
-                    // verifies the signature; this only keeps a wrong body from getting
-                    // that far.
-                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                    let received = (try? FileManager.default.attributesOfItem(atPath: tempURL.path))
-                        .flatMap { $0[.size] as? NSNumber }?.int64Value ?? 0
-                    guard UpdateInstallerSupport.downloadIsUsable(status: status,
-                                                                  receivedBytes: received,
-                                                                  expectedBytes: expectedBytes) else {
-                        try? FileManager.default.removeItem(at: tempURL)
-                        DispatchQueue.main.async {
-                            self.state = offered.map { State.available(version: $0) }
-                                ?? .failed("HTTP \(status)")
-                        }
-                        return
-                    }
-                    // Move out of the session's scratch space before handing off.
-                    let dmgURL = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("SasNotch-update.dmg")
-                    try? FileManager.default.removeItem(at: dmgURL)
-                    do {
-                        try FileManager.default.moveItem(at: tempURL, to: dmgURL)
-                    } catch {
-                        DispatchQueue.main.async {
-                            self.state = offered.map { State.available(version: $0) }
-                                ?? .failed(error.localizedDescription)
-                        }
-                        return
-                    }
-                    DispatchQueue.main.async {
-                        self.state = .installing
-                        self.launchInstaller(dmgPath: dmgURL.path, offered: offered)
-                    }
-                })
-        } catch {
-            DispatchQueue.main.async {
-                self.state = offered.map { State.available(version: $0) }
-                    ?? .failed(error.localizedDescription)
-            }
-            return
-        }
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-        downloadSession = session
-        let task = session.dataTask(with: downloadURL)
-        task.resume()
+        // Sparkle downloads, verifies and installs, with its own progress window.
+        guard !AppInfo.isDeveloperBuild else { return }  // never replace the local dev build over itself
+        SparkleUpdater.shared.checkForUpdates()
     }
 
     /// Hands the swap to a detached shell script: it waits for this process to

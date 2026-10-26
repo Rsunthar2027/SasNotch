@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build:
+    name: Build, selftest and tests
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Scan for secrets
+        run: ./Tools/scan-secrets.sh
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Selftest
+        run: ./build/SasNotch --selftest
+
+      - name: Package
+        run: |
+          ./Tools/make-zip.sh
+          ./Tools/make-dmg.sh
+
+      - name: Unit tests
+        run: ./build.sh --test
+
+  xcodebuild:
+    name: Xcode build of the Swift package
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: xcodebuild
+        run: xcodebuild -scheme SasNotch -destination 'platform=macOS' -skipPackagePluginValidation build

@@ -24,7 +24,14 @@ set -euo pipefail
 
 IDENTITY="SasNotch Self-Signed"
 KC="$HOME/Library/Keychains/sasnotch-signing.keychain-db"
-KCPASS="sasnotch-signing"
+# The signing keychain's password is random per Mac and kept in the login
+# keychain, so nothing in this public repository unlocks it.
+KC_SERVICE="SasNotch signing keychain"
+KCPASS="$(security find-generic-password -s "$KC_SERVICE" -a "$USER" -w 2>/dev/null || true)"
+if [[ -z "$KCPASS" ]]; then
+    KCPASS="$(openssl rand -hex 24)"
+    security add-generic-password -s "$KC_SERVICE" -a "$USER" -w "$KCPASS" -U
+fi
 
 # A find-identity listing also names certificates codesign then rejects, and -v
 # excludes every self-signed one; ask codesign itself with a throwaway copy.
@@ -40,7 +47,18 @@ identity_can_sign() {
     return $signed
 }
 
-if identity_can_sign; then
+# --export=DIR also writes the new identity as a password-protected .p12 for
+# CI (the SIGNING_CERT_P12 secret), with its password beside it. Exporting
+# from the keychain later would need the keychain's own prompt, so an export
+# always issues a fresh identity. Do it once, before the first release.
+EXPORT_DIR=""
+for arg in "$@"; do
+    case "$arg" in
+        --export=*) EXPORT_DIR="${arg#*=}" ;;
+    esac
+done
+
+if [[ -z "$EXPORT_DIR" ]] && identity_can_sign; then
     echo "✓ Signing identity already installed."
     exit 0
 fi
@@ -63,6 +81,18 @@ openssl pkcs12 -export -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
     echo "✗ openssl pkcs12 could not export the identity." >&2
     exit 1
 }
+
+if [[ -n "$EXPORT_DIR" ]]; then
+    mkdir -p "$EXPORT_DIR"
+    chmod 700 "$EXPORT_DIR"
+    EXPORT_PASS="$(openssl rand -hex 24)"
+    openssl pkcs12 -export -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
+        -out "$EXPORT_DIR/SasNotch-Self-Signed.p12" -passout pass:"$EXPORT_PASS" -name "$IDENTITY" \
+        -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
+    printf '%s' "$EXPORT_PASS" > "$EXPORT_DIR/SasNotch-Self-Signed.p12.password"
+    chmod 600 "$EXPORT_DIR/SasNotch-Self-Signed.p12" "$EXPORT_DIR/SasNotch-Self-Signed.p12.password"
+    echo "✓ Exported the identity for CI to $EXPORT_DIR (keep a backup; never commit it)."
+fi
 
 security delete-keychain "$KC" 2>/dev/null || true
 security create-keychain -p "$KCPASS" "$KC"

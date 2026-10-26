@@ -1,0 +1,115 @@
+name: Release
+
+# A version tag (v1.2.3) builds, signs and packages SasNotch, writes the
+# Sparkle appcast and publishes a GitHub Release with SasNotch.zip,
+# SasNotch.dmg and appcast.xml. The app reads its update feed from
+# releases/latest/download/appcast.xml.
+#
+# Secrets (Settings › Secrets and variables › Actions):
+#   SIGNING_CERT_P12       base64 of the "SasNotch Self-Signed" .p12
+#   SIGNING_CERT_PASSWORD  its password
+#   SPARKLE_ED_PRIVATE_KEY the EdDSA private key from generate_keys -x
+# Without the certificate the build is signed ad-hoc; without the Sparkle
+# key the release ships without an appcast and the app cannot update itself.
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, package and publish
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Read the version from the tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag $GITHUB_REF_NAME is not a vX.Y.Z version" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Scan for secrets
+        run: ./Tools/scan-secrets.sh
+
+      - name: Set up signing
+        env:
+          SIGNING_CERT_P12: ${{ secrets.SIGNING_CERT_P12 }}
+          SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: ./Tools/ci-setup-signing.sh
+
+      - name: Build
+        env:
+          SASNOTCH_VERSION: ${{ steps.version.outputs.version }}
+          SASNOTCH_FEED_URL: https://github.com/${{ github.repository }}/releases/latest/download/appcast.xml
+        run: ./build.sh
+
+      - name: Selftest
+        run: ./build/SasNotch --selftest
+
+      - name: Report the signature
+        run: codesign -dvv build/stage/SasNotch.app 2>&1 | grep -E "Authority|Identifier|Signature" || true
+
+      - name: Package
+        run: |
+          ./Tools/make-zip.sh
+          ./Tools/make-dmg.sh
+
+      - name: Write the appcast
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [[ -z "$SPARKLE_ED_PRIVATE_KEY" ]]; then
+            echo "::warning::SPARKLE_ED_PRIVATE_KEY is not set; this release has no appcast."
+            exit 0
+          fi
+          ./Tools/make-appcast.sh "$VERSION" "$GITHUB_REPOSITORY"
+
+      - name: Release notes from CHANGELOG
+        id: notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          NOTES="$(awk -v hdr="## [$VERSION]" 'index($0,hdr)==1{g=1;next} /^## \[/&&g{exit} g{print}' CHANGELOG.md)"
+          if [[ -z "${NOTES//[[:space:]]/}" ]]; then
+            NOTES="$(awk 'index($0,"## [Unreleased]")==1{g=1;next} /^## \[/&&g{exit} g{print}' CHANGELOG.md)"
+          fi
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          {
+            printf '%s\n\n' "$NOTES"
+            echo "**Install:** run the one-line command in the README, or download SasNotch.dmg below and drag SasNotch to Applications. Requires an Apple Silicon Mac with macOS 14 or later."
+            echo ""
+            echo "SasNotch is signed with its own certificate, not an Apple Developer ID, so a browser download needs one trip to System Settings › Privacy & Security › Open Anyway. The README explains it."
+          } > "$NOTES_FILE"
+          echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES_FILE: ${{ steps.notes.outputs.file }}
+        run: |
+          cd dist
+          shasum -a 256 SasNotch.zip SasNotch.dmg > SHA256SUMS
+          ASSETS=(SasNotch.zip SasNotch.dmg SHA256SUMS)
+          [[ -f appcast.xml ]] && ASSETS+=(appcast.xml)
+          gh release create "$GITHUB_REF_NAME" "${ASSETS[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "SasNotch $VERSION" \
+            --notes-file "$NOTES_FILE" \
+            --verify-tag

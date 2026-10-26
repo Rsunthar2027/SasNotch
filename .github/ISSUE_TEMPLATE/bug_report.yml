@@ -1,0 +1,38 @@
+name: Bug report
+description: Something in SasNotch does not work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Hover over the notch
+        2. Click the Mirror tab
+        3. …
+  - type: input
+    id: version
+    attributes:
+      label: SasNotch version
+      description: Menu bar icon › About.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac model
+      placeholder: "macOS 26.3, MacBook Pro 14-inch (M3)"
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or anything else
