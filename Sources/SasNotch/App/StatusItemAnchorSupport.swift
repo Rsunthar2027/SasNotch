@@ -1,0 +1,203 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Vorssaint
+// Modified for SasNotch by SasNotch contributors, 2026
+
+import AppKit
+import CoreGraphics
+import Foundation
+
+/// Pure geometry for anchoring the panel to a status item whose window frame
+/// may be lying. macOS 27 can leave a (re)created status item's window frame
+/// stranded at the slot it was born in (the far right of the status area)
+/// while the icon is drawn — and clicked — at the user's arranged spot, and
+/// the mismatch survives relaunches. A popover anchored through that frame
+/// opens against the screen edge instead of under the icon. The click that is
+/// opening the panel is the one position the window server vouches for, so it
+/// outranks the reported frame when the two clearly disagree.
+///
+/// A menu bar set to hide itself parks that same window outside the visible
+/// area once the bar slides away, which strands the panel in the same way the
+/// moment its content changes height. Both cases are handled by pinning the
+/// panel to an anchor captured while the bar was still up.
+enum StatusItemAnchorSupport {
+    /// Slack past the button's half-width before a click counts as drift: a
+    /// click anywhere inside the button must never trigger a correction, and
+    /// the margin absorbs the item's expanded hit area plus a sloppy click on
+    /// its edge. A genuinely stale frame sits a hundred points or more away.
+    static let clickDriftSlack: Double = 24
+
+    /// How far the popover's positioning rect must shift on x so the panel
+    /// anchors at the click, or nil when the click agrees with the reported
+    /// frame (the healthy case, which must stay byte-for-byte untouched).
+    static func anchorDriftX(clickX: Double,
+                             reportedMidX: Double,
+                             buttonWidth: Double) -> Double? {
+        let drift = clickX - reportedMidX
+        guard abs(drift) > buttonWidth / 2 + clickDriftSlack else { return nil }
+        return drift
+    }
+
+    /// How far down from the top of a screen a status item's window can sit and
+    /// still describe a menu bar. Clears the taller bar drawn around a camera
+    /// housing with room to spare, while staying far from any ordinary window.
+    /// Measured off the screen's own top edge, never off the area left over
+    /// after the bar: a fullscreen screen reserves nothing, and a band derived
+    /// from the visible area would collapse there and reject a status item
+    /// revealed on hover exactly while it is on screen and clickable.
+    static let menuBarBand: CGFloat = 48
+
+    /// Breathing room kept between the panel and the edges of the usable area.
+    static let panelEdgeMargin: CGFloat = 8
+
+    /// Whether a status item's reported window frame is worth anchoring to.
+    /// A bar that hides itself parks its window out of the visible area, so
+    /// the frame still exists but points nowhere, and a panel positioned
+    /// through it collapses into a screen corner. A frame only counts when it
+    /// has real size and its middle sits in the bar band of an attached screen.
+    static func isTrustworthyStatusFrame(_ frame: CGRect,
+                                         screenFrames: [CGRect] = NSScreen.screens.map(\.frame),
+                                         band: CGFloat = menuBarBand) -> Bool {
+        guard frame.width > 0, frame.height > 0 else { return false }
+        return screenFrames.contains { screen in
+            guard screen.intersects(frame) else { return false }
+            return frame.midY <= screen.maxY && frame.midY >= screen.maxY - band
+        }
+    }
+
+    /// A freshly created status item is born with a zero-height window and
+    /// only settles into the menu bar a moment later (issue #1394). Treating
+    /// that birth frame as "hidden" makes recovery race macOS placement.
+    static func isSettlingStatusFrame(_ frame: CGRect?) -> Bool {
+        guard let frame else { return true }
+        if frame.width <= 0, frame.height <= 0 { return true }
+        return frame.width > 0 && frame.height <= 0
+    }
+
+    /// Bound recovery even if the system immediately closes the panel again.
+    static let panelReopenCooldown: TimeInterval = 1
+
+    /// currentEvent can outlive its dispatch. Only a fresh click delivered to
+    /// this panel permits recovery; keys, other windows and old events do not.
+    static func shouldReopenPanel(closedByApp: Bool,
+                                  lastFrame: CGRect?,
+                                  panelWindowNumber: Int?,
+                                  event: NSEvent?,
+                                  secondsSinceLastReopen: TimeInterval,
+                                  uptime: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Bool {
+        guard !closedByApp,
+              secondsSinceLastReopen > panelReopenCooldown,
+              let lastFrame, let panelWindowNumber, panelWindowNumber > 0,
+              let event, event.windowNumber == panelWindowNumber,
+              event.type == .leftMouseDown || event.type == .leftMouseUp
+                || event.type == .rightMouseDown || event.type == .rightMouseUp,
+              (0...0.25).contains(uptime - event.timestamp) else { return false }
+        return CGRect(origin: .zero, size: lastFrame.size).contains(event.locationInWindow)
+    }
+
+    /// Opening the panel activates SasNotch so its controls take keys, which
+    /// makes it the frontmost app for as long as nothing else claims focus.
+    /// Once the panel is gone, the app that was in front before it opened gets
+    /// activation back, but only when the person dismissed the panel with
+    /// nothing taking over, and has not moved on meanwhile: another app is
+    /// already in front, or one of SasNotch's own windows (Settings,
+    /// Feedback, an editor) took focus from the panel.
+    static func shouldReturnActivation(to sourcePID: pid_t?,
+                                       ownPID: pid_t,
+                                       frontmostPID: pid_t?,
+                                       ownWindowIsKey: Bool,
+                                       closeReason: PanelCloseReason?) -> Bool {
+        guard closeReason?.dismissesWithoutTakeover == true,
+              let sourcePID, sourcePID > 0, sourcePID != ownPID,
+              frontmostPID == ownPID else { return false }
+        return !ownWindowIsKey
+    }
+
+    /// Whether handing activation back would pull the person to another
+    /// desktop. The app in front can have its windows only on a desktop that
+    /// is not showing, for example after a switch to an empty desktop before
+    /// the panel opened, and activating it then travels back there. Each entry
+    /// lists the Spaces of one of the app's windows. A window on no Space is a
+    /// leftover surface and does not count, so an app with no windows open
+    /// still gets activation back, and so does one whenever the visible Spaces
+    /// are unknown.
+    static func handbackWouldSwitchDesktop(windowSpaces: [[UInt64]],
+                                           visibleSpaces: Set<UInt64>?) -> Bool {
+        guard let visibleSpaces else { return false }
+        let windows = windowSpaces.filter { !$0.isEmpty }
+        return !windows.isEmpty && windows.allSatisfy {
+            SpaceHopSupport.isParkedOnHiddenSpace(windowSpaces: $0, visibleSpaces: visibleSpaces)
+        }
+    }
+
+    /// The app to hand activation back to after a change seen while the panel
+    /// is open. The panel joins every desktop and stays up when SasNotch
+    /// deactivates, so the person can move on without closing it. Another app
+    /// becoming active replaces the remembered one; SasNotch itself taking
+    /// activation back (a click in the panel) keeps it. A desktop switch drops
+    /// it, since activating it later would travel back to the desktop it is on.
+    static func panelActivationSource<App>(after change: PanelActivationChange<App>,
+                                           current: App?,
+                                           isOwnApp: (App) -> Bool) -> App? {
+        switch change {
+        case .activeSpaceChanged:
+            return nil
+        case .appActivated(let app):
+            return isOwnApp(app) ? current : app
+        }
+    }
+
+    /// Where an open panel belongs for a cached anchor: centered on the
+    /// anchor's horizontal middle with its top edge held, so content that
+    /// grows or shrinks (switching panel tabs) extends downward instead of
+    /// being placed again from a status item frame that may since have been
+    /// parked away. Kept inside the usable area with a margin.
+    static func pinnedPanelFrame(size: CGSize,
+                                 anchorMidX: CGFloat,
+                                 anchorTop: CGFloat,
+                                 visibleFrame: CGRect,
+                                 margin: CGFloat = panelEdgeMargin) -> CGRect {
+        let lowestMidX = visibleFrame.minX + size.width / 2 + margin
+        let highestMidX = visibleFrame.maxX - size.width / 2 - margin
+        let midX = lowestMidX <= highestMidX
+            ? min(max(anchorMidX, lowestMidX), highestMidX)
+            : visibleFrame.midX
+        // A screen too short to hold the panel keeps it at the top; the panel
+        // caps its own height, so the overflow only shows on odd layouts.
+        let lowestTop = visibleFrame.minY + size.height + margin
+        let top = lowestTop <= visibleFrame.maxY
+            ? min(max(anchorTop, lowestTop), visibleFrame.maxY)
+            : visibleFrame.maxY
+        return CGRect(x: (midX - size.width / 2).rounded(),
+                      y: (top - size.height).rounded(),
+                      width: size.width,
+                      height: size.height)
+    }
+}
+
+/// Why the menu bar panel closed. Only a plain dismissal hands activation back
+/// to the app that was in front: an action starts its work right after the
+/// close (often opening another app), and an outside click can land on
+/// something that does not take activation, such as another menu bar item.
+enum PanelCloseReason {
+    /// Esc while the panel has focus.
+    case escape
+    /// A click on the status item (or its metric item) that owns the panel.
+    case statusItem
+    /// A click the dismissal monitors saw outside the panel.
+    case outsideClick
+    /// A panel row or button that closes the panel on its way to other work.
+    case action
+
+    var dismissesWithoutTakeover: Bool {
+        switch self {
+        case .escape, .statusItem: return true
+        case .outsideClick, .action: return false
+        }
+    }
+}
+
+/// What can happen to the remembered app while the panel stays open.
+enum PanelActivationChange<App> {
+    case activeSpaceChanged
+    case appActivated(App)
+}

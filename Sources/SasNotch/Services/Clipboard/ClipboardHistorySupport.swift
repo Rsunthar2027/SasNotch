@@ -1,0 +1,1180 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Vorssaint
+// Modified for SasNotch by SasNotch contributors, 2026
+
+import AppKit
+import Carbon.HIToolbox
+import SwiftUI
+
+/// How the history window shows its entries: a list in a window that keeps
+/// the size the user gives it, or a shelf of cards along the bottom of the
+/// screen.
+enum ClipboardHistoryLayout: String, CaseIterable {
+    case cards
+    case list
+
+    /// A value this version does not know, such as one from a newer
+    /// version, reads as the default.
+    static func current(in defaults: UserDefaults = .standard) -> ClipboardHistoryLayout {
+        defaults.string(forKey: DefaultsKey.clipboardHistoryLayout).flatMap(Self.init(rawValue:)) ?? .list
+    }
+
+    /// Cards run left to right, so a plain side arrow walks them. A list
+    /// leaves the side arrows to the search field's caret.
+    var sideArrowsMoveSelection: Bool { self == .cards }
+}
+
+enum ClipboardHistoryWindowSizing {
+    static let compactDefault = NSSize(width: 560, height: 420)
+    static let compactMinimum = NSSize(width: 560, height: 300)
+    static let previewExtra = NSSize(width: 280, height: 80)
+
+    static func minimumSize(preview: Bool) -> NSSize {
+        NSSize(width: compactMinimum.width + (preview ? previewExtra.width : 0),
+               height: compactMinimum.height + (preview ? previewExtra.height : 0))
+    }
+
+    static func contentSize(preview: Bool, savedWidth: Double, savedHeight: Double,
+                            visibleFrame: NSRect) -> NSSize {
+        let minimum = minimumSize(preview: preview)
+        let width = savedWidth.isFinite && savedWidth >= compactMinimum.width
+            ? CGFloat(savedWidth) : compactDefault.width
+        let height = savedHeight.isFinite && savedHeight >= compactMinimum.height
+            ? CGFloat(savedHeight) : compactDefault.height
+        let requested = NSSize(width: width + (preview ? previewExtra.width : 0),
+                               height: height + (preview ? previewExtra.height : 0))
+        return constrainedSize(NSSize(width: max(minimum.width, requested.width),
+                                      height: max(minimum.height, requested.height)),
+                               visibleFrame: visibleFrame)
+    }
+
+    /// A small display takes precedence over the preferred minimum, both
+    /// when opening the window and when dragging its resize handle.
+    static func constrainedSize(_ size: NSSize, visibleFrame: NSRect) -> NSSize {
+        NSSize(width: min(size.width, max(1, visibleFrame.width - 32)),
+               height: min(size.height, max(1, visibleFrame.height - 32)))
+    }
+
+    static func savedCompactSize(from contentSize: NSSize, preview: Bool) -> NSSize? {
+        let width = contentSize.width - (preview ? previewExtra.width : 0)
+        let height = contentSize.height - (preview ? previewExtra.height : 0)
+        guard width.isFinite, height.isFinite,
+              width >= compactMinimum.width, height >= compactMinimum.height else { return nil }
+        return NSSize(width: width, height: height)
+    }
+}
+
+/// Main-thread capture admission. Expiring a result does not release the
+/// actual queued read; stop/start must not release it either.
+struct ClipboardHistoryCaptureState {
+    private(set) var generation = 0
+    private(set) var inFlight = false
+    private(set) var needsBaseline = true
+
+    mutating func restart() {
+        generation &+= 1
+        needsBaseline = true
+    }
+
+    mutating func invalidate() {
+        generation &+= 1
+    }
+
+    mutating func begin() -> Int? {
+        guard !inFlight else { return nil }
+        inFlight = true
+        generation &+= 1
+        return generation
+    }
+
+    func accepts(_ token: Int) -> Bool {
+        token == generation
+    }
+
+    mutating func expire(_ token: Int) {
+        if accepts(token) { invalidate() }
+    }
+
+    mutating func finish() {
+        inFlight = false
+    }
+
+    mutating func didBaseline() {
+        needsBaseline = false
+    }
+}
+
+/// Dictation apps such as Superwhisper type by putting their text on the
+/// clipboard, pasting it, and putting back whatever was there a moment later.
+/// An explicit temporary-content mark lets history recognize that return
+/// without treating ordinary repeated copies as a paste-and-restore.
+enum ClipboardHistoryPasteRestore {
+    /// How long after an explicitly temporary write the previous clipboard
+    /// can come back without a second copy notice.
+    static let window: TimeInterval = 3
+
+    static func isWithinWindow(capturedAt: Date, now: Date) -> Bool {
+        now >= capturedAt && now.timeIntervalSince(capturedAt) <= window
+    }
+}
+
+/// Decides whether a polled pasteboard change count is a new copy.
+///
+/// The count normally only grows, but it lives in the pasteboard server
+/// (pboard): when that process crashes or is restarted, launchd starts a new
+/// one whose count begins again near zero. A plain `read > last` check then
+/// rejects every later copy until the new count climbs past the old one,
+/// which can take days, so history silently stops recording.
+enum ClipboardHistoryChangeCount {
+    /// The count to adopt, or nil when the read carries nothing new.
+    /// - Parameters:
+    ///   - read: the count observed by this poll.
+    ///   - since: the last known count when this poll was scheduled. Every
+    ///     count known then came from the same server before the read was
+    ///     queued, so only a server restart can make `read` lower than it.
+    ///   - last: the last known count now, which a write finishing while the
+    ///     read was in flight (history copy, paste as plain text, auto-clear)
+    ///     may have raised past `read`. That stale read stays rejected.
+    static func accepted(read: Int, since: Int, last: Int) -> Int? {
+        if read < since { return read }
+        return read > last ? read : nil
+    }
+}
+
+enum ClipboardHistoryEntryKind: String, Codable {
+    case text
+    case image
+    case files
+}
+
+struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
+    let id: UUID
+    /// The content for text entries; empty for images and files, whose display
+    /// strings are derived so they never go stale in storage.
+    var text: String
+    var copiedAt: Date
+    var pinnedAt: Date?
+    let kind: ClipboardHistoryEntryKind
+    /// Absolute paths for `.files` entries, in the order they were copied.
+    let filePaths: [String]
+    /// PNG file name inside the clipboard image store for `.image` entries.
+    let imageFile: String?
+    /// SHA-256 of the PNG data, so re-copying the same image refreshes the
+    /// existing entry instead of storing a duplicate file.
+    let imageHash: String?
+    let imageWidth: Int?
+    let imageHeight: Int?
+    /// The app the copy came from, when the history could tell. Optional, so
+    /// a history written before it existed still decodes, and an older
+    /// version reading this file skips the key.
+    var sourceBundleID: String?
+
+    init(id: UUID = UUID(),
+         text: String,
+         copiedAt: Date = Date(),
+         pinnedAt: Date? = nil,
+         kind: ClipboardHistoryEntryKind = .text,
+         filePaths: [String] = [],
+         imageFile: String? = nil,
+         imageHash: String? = nil,
+         imageWidth: Int? = nil,
+         imageHeight: Int? = nil) {
+        self.id = id
+        self.text = text
+        self.copiedAt = copiedAt
+        self.pinnedAt = pinnedAt
+        self.kind = kind
+        self.filePaths = filePaths
+        self.imageFile = imageFile
+        self.imageHash = imageHash
+        self.imageWidth = imageWidth
+        self.imageHeight = imageHeight
+    }
+
+    var isPinned: Bool {
+        pinnedAt != nil
+    }
+
+    var fileNames: [String] {
+        filePaths.map { ($0 as NSString).lastPathComponent }
+    }
+
+    var imageDimensionsLabel: String {
+        guard let imageWidth, let imageHeight else { return "" }
+        return "\(imageWidth)×\(imageHeight)"
+    }
+
+    var preview: String {
+        switch kind {
+        case .text:
+            let prefix = text.prefix(ClipboardHistoryEditing.previewCharacters)
+            let collapsed = prefix
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\t", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let visible = collapsed.isEmpty ? String(prefix) : collapsed
+            return prefix.endIndex == text.endIndex ? visible : visible + "…"
+        case .image:
+            return imageDimensionsLabel
+        case .files:
+            return fileNames.joined(separator: ", ")
+        }
+    }
+
+    /// `preview` with its line breaks kept, for a card tall enough to show
+    /// the shape of a snippet or a list. Tabs still become spaces.
+    var cardPreview: String {
+        guard kind == .text else { return preview }
+        let prefix = text.prefix(ClipboardHistoryEditing.previewCharacters)
+        let spaced = prefix
+            .replacingOccurrences(of: "\t", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let visible = spaced.isEmpty ? String(prefix) : spaced
+        return prefix.endIndex == text.endIndex ? visible : visible + "…"
+    }
+
+    /// The color a text entry spells out, if that is all it holds.
+    var color: ColorValue? {
+        kind == .text ? ColorValue(text: text) : nil
+    }
+
+    /// `preview` collapsed further to a menu bar sized excerpt, for the
+    /// optional "show latest copy" status item. `preview` itself renders an
+    /// image as bare dimensions (nothing else displays it raw — every other
+    /// image row builds its own labeled string instead), so this adds the
+    /// same localized "Image" label those rows show next to the dimensions.
+    func menuBarText(maxCharacters: Int) -> String {
+        let base: String
+        if kind == .image {
+            let imageLabel = FeatureStrings.clipboard(L10n.shared.language).imageEntryLabel
+            base = "\(imageLabel) · \(imageDimensionsLabel)"
+        } else {
+            // The preview folds line feeds and tabs; a single-line menu bar
+            // title also cannot carry a carriage return or a Unicode line break.
+            base = preview.components(separatedBy: .newlines).joined(separator: " ")
+        }
+        guard base.count > maxCharacters else { return base }
+        return String(base.prefix(maxCharacters)) + "…"
+    }
+
+    /// Same clipboard content, regardless of when it was copied: re-copying
+    /// refreshes the existing entry instead of duplicating it.
+    func matchesContent(of other: ClipboardHistoryEntry) -> Bool {
+        guard kind == other.kind else { return false }
+        switch kind {
+        case .text: return text == other.text
+        case .image: return imageHash != nil && imageHash == other.imageHash
+        case .files: return filePaths == other.filePaths
+        }
+    }
+
+    /// What the search box can match. Image entries carry the localized label
+    /// plus dimensions so typing "image"/"imagem" finds them.
+    func searchableText(imageLabel: String) -> String {
+        switch kind {
+        case .text: return text
+        case .image: return "\(imageLabel) png \(imageDimensionsLabel)"
+        case .files:
+            let names = fileNames.joined(separator: " ")
+            let hasImage = filePaths.contains { ClipboardHistoryImageSupport.isImageFileName($0) }
+            return hasImage ? "\(imageLabel) \(names)" : names
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, text, copiedAt, pinnedAt, kind, filePaths, imageFile, imageHash, imageWidth, imageHeight
+        case sourceBundleID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        text = try container.decode(String.self, forKey: .text)
+        copiedAt = try container.decodeIfPresent(Date.self, forKey: .copiedAt) ?? Date()
+        pinnedAt = try container.decodeIfPresent(Date.self, forKey: .pinnedAt)
+        // Histories written before images and files existed decode as text.
+        kind = try container.decodeIfPresent(ClipboardHistoryEntryKind.self, forKey: .kind) ?? .text
+        filePaths = try container.decodeIfPresent([String].self, forKey: .filePaths) ?? []
+        imageFile = try container.decodeIfPresent(String.self, forKey: .imageFile)
+        imageHash = try container.decodeIfPresent(String.self, forKey: .imageHash)
+        imageWidth = try container.decodeIfPresent(Int.self, forKey: .imageWidth)
+        imageHeight = try container.decodeIfPresent(Int.self, forKey: .imageHeight)
+        sourceBundleID = try container.decodeIfPresent(String.self, forKey: .sourceBundleID)
+    }
+}
+
+enum ClipboardHistoryEditing {
+    /// A copied document should stay available, while a pathological
+    /// pasteboard payload still has a firm in-memory and on-disk bound.
+    static let maxCharacters = 1_000_000
+    static let maxStoredTextUTF8Bytes = 64 * 1_024 * 1_024
+    static let maxEncodedHistoryBytes = 96 * 1_024 * 1_024
+    /// Rows only need enough text to fill their three visible lines. Keeping
+    /// this bounded prevents a very large saved document from being copied
+    /// again merely to draw its list preview.
+    static let previewCharacters = 2_000
+    /// A hover tooltip is a transient popup, not a list row: previewCharacters
+    /// would let a whole page of prose through and read as a wall of text.
+    static let tooltipCharacters = 200
+
+    struct EncodedHistory {
+        let entries: [ClipboardHistoryEntry]
+        let data: Data
+    }
+
+    static func storableText(_ text: String) -> String? {
+        guard text.count <= maxCharacters,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return text
+    }
+
+    static func canSave(original: String, draft: String) -> Bool {
+        guard let text = storableText(draft) else { return false }
+        return text != original
+    }
+
+    /// `retentionDays` drops recent entries copied longer ago than that, even
+    /// under `recentLimit`; 0 keeps them. Pinned entries never expire, and
+    /// `ageExemptIDs` (an entry open in the editor) wait until they are let go.
+    /// An unpinned entry lands at the top of the recent list, so it counts as
+    /// just used: keeping its original copy date would let the retention
+    /// window drop it on the spot and silently undo the unpin.
+    static func unpinned(_ entry: ClipboardHistoryEntry, now: Date = Date()) -> ClipboardHistoryEntry {
+        var entry = entry
+        entry.pinnedAt = nil
+        entry.copiedAt = now
+        return entry
+    }
+
+    static func retainedEntries(_ entries: [ClipboardHistoryEntry],
+                                recentLimit: Int,
+                                retentionDays: Int = 0,
+                                ageExemptIDs: Set<UUID> = [],
+                                now: Date = Date(),
+                                textByteLimit: Int = maxStoredTextUTF8Bytes) -> [ClipboardHistoryEntry] {
+        var remainingBytes = max(0, textByteLimit)
+        func retained(_ candidates: [ClipboardHistoryEntry], limit: Int?) -> [ClipboardHistoryEntry] {
+            var result: [ClipboardHistoryEntry] = []
+            for entry in candidates {
+                if let limit, result.count >= limit { break }
+                let byteCount = entry.kind == .text ? entry.text.utf8.count : 0
+                guard byteCount <= remainingBytes else { continue }
+                remainingBytes -= byteCount
+                result.append(entry)
+            }
+            return result
+        }
+        let pinned = retained(entries.filter(\.isPinned), limit: nil)
+        let recentLimitOrNil = recentLimit <= 0 ? nil : recentLimit
+        let cutoff = retentionDays > 0
+            ? now.addingTimeInterval(-Double(retentionDays) * 86_400)
+            : nil
+        let recent = retained(entries.filter { entry in
+            guard !entry.isPinned else { return false }
+            guard let cutoff, !ageExemptIDs.contains(entry.id) else { return true }
+            return entry.copiedAt >= cutoff
+        }, limit: recentLimitOrNil)
+        return pinned + recent
+    }
+
+    static func preservesPinnedEntries(from original: [ClipboardHistoryEntry],
+                                       in retained: [ClipboardHistoryEntry]) -> Bool {
+        let retainedIDs = Set(retained.map(\.id))
+        return original.lazy.filter(\.isPinned).allSatisfy { retainedIDs.contains($0.id) }
+    }
+
+    static func canLoadEncodedHistory(byteCount: Int?) -> Bool {
+        guard let byteCount else { return false }
+        return byteCount >= 0 && byteCount <= maxEncodedHistoryBytes
+    }
+
+    /// Whether the pinned entries alone still fit the saved file. The encoder
+    /// below keeps pinned entries first and drops whatever no longer fits, so
+    /// a pin or an edit that fails this check would lose a pinned entry.
+    static func pinnedEntriesFit(_ entries: [ClipboardHistoryEntry],
+                                 byteLimit: Int = maxEncodedHistoryBytes) -> Bool {
+        let pinned = entries.filter(\.isPinned)
+        // JSON escaping turns one UTF-8 byte into at most six, and an entry's
+        // other fields stay well under 512 bytes, so a small pinned set is
+        // never encoded on the main thread just to be measured.
+        let rawBound = pinned.reduce(0) { total, entry in
+            total + 512 + entry.text.utf8.count + (entry.imageFile?.utf8.count ?? 0)
+                + entry.filePaths.reduce(0) { $0 + $1.utf8.count + 3 }
+        }
+        guard rawBound > (byteLimit - 2) / 6 else { return true }
+        let encoder = JSONEncoder()
+        var encodedSize = 2 // Opening and closing brackets.
+        for (offset, entry) in pinned.enumerated() {
+            guard let encoded = try? encoder.encode(entry) else { return false }
+            encodedSize += encoded.count + (offset == 0 ? 0 : 1)
+            if encodedSize > byteLimit { return false }
+        }
+        return true
+    }
+
+    /// Encodes a readable snapshot without ever writing a file the next
+    /// launch would reject. JSON escaping can make stored data much larger
+    /// than the raw UTF-8 text budget, so the encoded bound must be enforced
+    /// on the actual bytes rather than estimated from the strings.
+    static func encodedHistory(_ entries: [ClipboardHistoryEntry],
+                               byteLimit: Int = maxEncodedHistoryBytes) -> EncodedHistory? {
+        guard byteLimit >= 2 else { return nil }
+        let encoder = JSONEncoder()
+        let ordered = entries.filter(\.isPinned) + entries.filter { !$0.isPinned }
+        var retained: [ClipboardHistoryEntry] = []
+        var encodedEntries: [Data] = []
+        var encodedSize = 2 // Opening and closing brackets.
+
+        for entry in ordered {
+            guard let encoded = try? encoder.encode(entry) else { return nil }
+            let addedSize = encoded.count + (encodedEntries.isEmpty ? 0 : 1)
+            guard encodedSize + addedSize <= byteLimit else { continue }
+            retained.append(entry)
+            encodedEntries.append(encoded)
+            encodedSize += addedSize
+        }
+
+        var data = Data(capacity: encodedSize)
+        data.append(0x5B)
+        for (index, encoded) in encodedEntries.enumerated() {
+            if index > 0 { data.append(0x2C) }
+            data.append(encoded)
+        }
+        data.append(0x5D)
+        return EncodedHistory(entries: retained, data: data)
+    }
+}
+
+/// Lays copied JSON out for reading in the preview. Only the whitespace
+/// between tokens changes: re-encoding through JSONSerialization would also
+/// reorder keys and respell numbers, and the preview has to show what the
+/// paste will give.
+enum ClipboardJSONFormat {
+    static let maxBytes = 256 * 1_024
+    /// Deep nesting indents every line again, so a small input can lay out
+    /// to many times its size; past this the preview keeps the copied text.
+    static let maxOutputBytes = 4 * maxBytes
+
+    static func pretty(_ text: String) -> String? {
+        guard text.utf8.count <= maxBytes,
+              let first = text.first(where: { !$0.isWhitespace }), first == "{" || first == "[",
+              (try? JSONSerialization.jsonObject(with: Data(text.utf8))) != nil
+        else { return nil }
+        let scalars = Array(text.unicodeScalars)
+        let blanks: Set<Unicode.Scalar> = [" ", "\t", "\n", "\r"]
+        var out = String.UnicodeScalarView()
+        // Never less than the layout's size: the input plus what it adds.
+        var size = text.utf8.count
+        var depth = 0, index = 0, inString = false, escaped = false
+        func newline() {
+            out.append("\n")
+            out.append(contentsOf: String(repeating: " ", count: depth * 2).unicodeScalars)
+            size += 1 + depth * 2
+        }
+        while index < scalars.count {
+            guard size <= maxOutputBytes else { return nil }
+            let scalar = scalars[index]
+            index += 1
+            if inString {
+                out.append(scalar)
+                if escaped {
+                    escaped = false
+                } else if scalar == "\\" {
+                    escaped = true
+                } else if scalar == "\"" {
+                    inString = false
+                }
+                continue
+            }
+            switch scalar {
+            case _ where blanks.contains(scalar):
+                continue
+            case "\"":
+                inString = true
+                out.append(scalar)
+            case "{", "[":
+                out.append(scalar)
+                // An empty object or array stays on one line.
+                var next = index
+                while next < scalars.count, blanks.contains(scalars[next]) { next += 1 }
+                if next < scalars.count, scalars[next] == (scalar == "{" ? "}" : "]") {
+                    out.append(scalars[next])
+                    index = next + 1
+                } else {
+                    depth += 1
+                    newline()
+                }
+            case "}", "]":
+                // JSONSerialization takes a trailing comma, whose line break
+                // would leave an empty line before the bracket.
+                while out.last == " " { out.removeLast() }
+                if out.last == "\n" { out.removeLast() }
+                depth -= 1
+                newline()
+                out.append(scalar)
+            case ",":
+                out.append(scalar)
+                newline()
+            case ":":
+                out.append(contentsOf: ": ".unicodeScalars)
+                size += 1
+            default:
+                out.append(scalar)
+            }
+        }
+        return String(out)
+    }
+}
+
+/// How large a picture from the history or a screen capture is read for
+/// text recognition. Screen OCR hands Vision its whole capture, so a 5K or
+/// 6K screenshot keeps every pixel and its small text; only a larger
+/// picture, like a long scrolling capture, is scaled down to this area to
+/// bound its bitmap.
+enum ClipboardImageRecognition {
+    static let maxPixels = 24_000_000
+
+    /// The longest side to decode a `width` by `height` picture at.
+    static func decodeMaxPixelSize(width: Int, height: Int) -> Int {
+        let longest = max(width, height, 1)
+        let pixels = Double(max(width, 1)) * Double(max(height, 1))
+        guard pixels > Double(maxPixels) else { return longest }
+        return max(1, Int(Double(longest) * (Double(maxPixels) / pixels).squareRoot()))
+    }
+
+    /// The same bound for a picture already in memory, like a capture in a
+    /// screenshot preview: the size to scale it to, or nil to read it whole.
+    static func scaledSize(width: Int, height: Int) -> (width: Int, height: Int)? {
+        let longest = max(width, height, 1)
+        let side = decodeMaxPixelSize(width: width, height: height)
+        guard side < longest else { return nil }
+        let shorter = max(1, Int(Double(min(width, height)) * Double(side) / Double(longest)))
+        return width >= height ? (width: side, height: shorter) : (width: shorter, height: side)
+    }
+}
+
+struct ClipboardHistorySearchFolded: Equatable {
+    let searchableText: String
+    let normalizedText: String
+    let words: Set<String>
+
+    init(searchableText: String) {
+        self.searchableText = searchableText
+        let folded = ClipboardHistorySearch.normalized(searchableText)
+        self.normalizedText = folded
+        self.words = ClipboardHistorySearch.words(in: folded)
+    }
+}
+
+struct ClipboardHistorySearchCandidate: Equatable {
+    var index: Int
+    var text: String {
+        didSet {
+            normalizedText = ClipboardHistorySearch.normalized(text)
+            words = ClipboardHistorySearch.words(in: normalizedText)
+        }
+    }
+    var isPinned: Bool
+    private(set) var normalizedText: String
+    private(set) var words: Set<String>
+
+    init(index: Int,
+         text: String,
+         isPinned: Bool,
+         normalizedText: String? = nil,
+         words: Set<String>? = nil) {
+        self.index = index
+        self.text = text
+        self.isPinned = isPinned
+        let folded = normalizedText ?? ClipboardHistorySearch.normalized(text)
+        self.normalizedText = folded
+        self.words = words ?? ClipboardHistorySearch.words(in: folded)
+    }
+}
+
+struct ClipboardHistorySearchCache {
+    private var foldedEntries: [UUID: ClipboardHistorySearchFolded] = [:]
+    private var cachedCandidates: [ClipboardHistorySearchCandidate] = []
+    private var cachedStamp: Int?
+    private var cachedImageLabel: String?
+
+    var cachedEntryCount: Int { foldedEntries.count }
+    var candidateCount: Int { cachedCandidates.count }
+    private(set) var foldCount = 0
+
+    mutating func candidates(for entries: [ClipboardHistoryEntry],
+                             stamp: Int,
+                             imageLabel: String) -> [ClipboardHistorySearchCandidate] {
+        if cachedStamp == stamp && cachedImageLabel == imageLabel {
+            return cachedCandidates
+        }
+
+        if entries.isEmpty {
+            clear()
+            cachedStamp = stamp
+            cachedImageLabel = imageLabel
+            return []
+        }
+
+        var nextFolded: [UUID: ClipboardHistorySearchFolded] = [:]
+        nextFolded.reserveCapacity(entries.count)
+
+        let candidates = entries.enumerated().map { index, entry in
+            let searchable = entry.searchableText(imageLabel: imageLabel)
+            let folded: ClipboardHistorySearchFolded
+            if let existing = foldedEntries[entry.id], existing.searchableText == searchable {
+                folded = existing
+            } else {
+                folded = ClipboardHistorySearchFolded(searchableText: searchable)
+                foldCount += 1
+            }
+            nextFolded[entry.id] = folded
+            return ClipboardHistorySearchCandidate(index: index,
+                                                   text: searchable,
+                                                   isPinned: entry.isPinned,
+                                                   normalizedText: folded.normalizedText,
+                                                   words: folded.words)
+        }
+
+        foldedEntries = nextFolded
+        cachedStamp = stamp
+        cachedImageLabel = imageLabel
+        cachedCandidates = candidates
+        return candidates
+    }
+
+    mutating func prune(keeping entries: [ClipboardHistoryEntry], imageLabel: String? = nil) {
+        if entries.isEmpty {
+            clear()
+            return
+        }
+        guard !foldedEntries.isEmpty || !cachedCandidates.isEmpty else { return }
+        guard let label = imageLabel ?? cachedImageLabel else { return }
+        cachedCandidates.removeAll()
+        cachedStamp = nil
+        var retained: [UUID: ClipboardHistorySearchFolded] = [:]
+        retained.reserveCapacity(foldedEntries.count)
+        for entry in entries {
+            if let existing = foldedEntries[entry.id],
+               existing.searchableText == entry.searchableText(imageLabel: label) {
+                retained[entry.id] = existing
+            }
+        }
+        foldedEntries = retained
+    }
+
+    func isCached(id: UUID) -> Bool {
+        foldedEntries[id] != nil
+    }
+
+    mutating func clear() {
+        foldedEntries.removeAll()
+        cachedCandidates.removeAll()
+        cachedStamp = nil
+        cachedImageLabel = nil
+    }
+}
+
+enum ClipboardHistorySearch {
+    static func rankedIndexes(candidates: [ClipboardHistorySearchCandidate],
+                              matching query: String) -> [Int] {
+        let normalizedQuery = normalized(query)
+        let tokens = queryTokens(normalizedQuery)
+        guard !tokens.isEmpty else { return candidates.map(\.index) }
+
+        return candidates
+            .compactMap { candidate -> (index: Int, score: Int, originalOrder: Int)? in
+                let text = candidate.normalizedText
+                guard tokens.allSatisfy({ text.contains($0) }) else { return nil }
+                return (candidate.index,
+                        score(for: text,
+                              words: candidate.words,
+                              normalizedQuery: normalizedQuery,
+                              tokens: tokens,
+                              isPinned: candidate.isPinned),
+                        candidate.index)
+            }
+            .sorted {
+                if $0.score != $1.score { return $0.score > $1.score }
+                return $0.originalOrder < $1.originalOrder
+            }
+            .map(\.index)
+    }
+
+    static func matches(_ text: String, query: String) -> Bool {
+        let normalizedQuery = normalized(query)
+        let tokens = queryTokens(normalizedQuery)
+        guard !tokens.isEmpty else { return true }
+        let normalizedText = normalized(text)
+        return tokens.allSatisfy { normalizedText.contains($0) }
+    }
+
+    /// Non-empty search tokens from a raw query, split by whitespace.
+    static func searchTokens(for query: String) -> [String] {
+        query.split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+            .filter { !$0.isEmpty }
+    }
+
+    /// Finds all matching character ranges in `text` for the given tokens,
+    /// matching case-insensitively, diacritic-insensitively, and width-insensitively.
+    static func highlightRanges(in text: String, tokens: [String]) -> [Range<String.Index>] {
+        guard !text.isEmpty, !tokens.isEmpty else { return [] }
+        var ranges: [Range<String.Index>] = []
+        for token in tokens {
+            guard !token.isEmpty else { continue }
+            var search = text.startIndex..<text.endIndex
+            while search.lowerBound < text.endIndex,
+                  let r = text.range(of: token,
+                                     options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+                                     range: search) {
+                ranges.append(r)
+                if r.upperBound == search.lowerBound {
+                    break
+                }
+                search = r.upperBound..<text.endIndex
+            }
+        }
+        return ranges
+    }
+
+    static func words(in normalizedText: String) -> Set<String> {
+        Set(normalizedText.split(whereSeparator: \.isWhitespace).map(String.init))
+    }
+
+    private static func score(for text: String,
+                              words: Set<String>,
+                              normalizedQuery: String,
+                              tokens: [String],
+                              isPinned: Bool) -> Int {
+        var score = isPinned ? 30 : 0
+        if text == normalizedQuery { score += 1_200 }
+        if text.hasPrefix(normalizedQuery) { score += 900 }
+        if text.contains(normalizedQuery) { score += 700 }
+
+        for token in tokens {
+            if words.contains(token) {
+                score += 140
+            } else if words.contains(where: { $0.hasPrefix(token) }) {
+                score += 80
+            } else {
+                score += 40
+            }
+        }
+        return score
+    }
+
+    private static func queryTokens(_ normalizedQuery: String) -> [String] {
+        normalizedQuery
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+            .filter { !$0.isEmpty }
+    }
+
+    static func normalized(_ value: String) -> String {
+        value
+            // No locale: Turkish folds a dotted I to a dotless one, and a
+            // search that inherited the Mac's locale would stop finding
+            // "ISTANBUL" for someone who typed "istanbul".
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+                     locale: nil)
+            .lowercased()
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// Marks what a clipboard search matched in a row's text. Only the matches
+/// change: the rest keeps the font and color modifiers of the `Text` it goes
+/// into, so a row looks the same with and without a search.
+enum SearchHighlightText {
+    /// More than any history row shows within its line limit, even in a wide
+    /// history window. A long preview is searched and styled only this far,
+    /// so typing in a large history of long texts stays cheap.
+    static let visibleCharacters = 500
+
+    /// The part of `string` a highlighted row draws, with an ellipsis when
+    /// it is cut.
+    static func excerpt(_ string: String) -> String {
+        guard let end = string.index(string.startIndex, offsetBy: visibleCharacters, limitedBy: string.endIndex),
+              end < string.endIndex else { return string }
+        return String(string[..<end]) + "…"
+    }
+
+    /// A nil `highlightColor` keeps the text's own color, so the matches
+    /// stand out by weight alone.
+    static func highlighted(_ string: String,
+                            tokens: [String],
+                            fontSize: CGFloat,
+                            highlightColor: Color? = .accentColor,
+                            highlightWeight: Font.Weight = .semibold) -> AttributedString {
+        let visible = excerpt(string)
+        var attributed = AttributedString(visible)
+        for range in ClipboardHistorySearch.highlightRanges(in: visible, tokens: tokens) {
+            guard let attributedRange = Range(range, in: attributed) else { continue }
+            if let highlightColor { attributed[attributedRange].foregroundColor = highlightColor }
+            attributed[attributedRange].font = .system(size: fontSize, weight: highlightWeight)
+        }
+        return attributed
+    }
+
+    /// A row's text: the plain string while nothing is searched.
+    static func text(_ string: String,
+                     tokens: [String],
+                     fontSize: CGFloat,
+                     highlightColor: Color? = .accentColor) -> Text {
+        guard !tokens.isEmpty else { return Text(string) }
+        return Text(highlighted(string, tokens: tokens, fontSize: fontSize, highlightColor: highlightColor))
+    }
+}
+
+enum ClipboardHistorySelection {
+    static func previewEntry(preferredID: UUID?,
+                             visibleEntries: [ClipboardHistoryEntry],
+                             selectedEntry: ClipboardHistoryEntry?) -> ClipboardHistoryEntry? {
+        if let preferredID,
+           let entry = visibleEntries.first(where: { $0.id == preferredID }) {
+            return entry
+        }
+        return selectedEntry
+    }
+}
+
+enum ClipboardHistoryPreview {
+    static func handlesSpace(selectionIsVisible: Bool, hasModifiers: Bool) -> Bool {
+        selectionIsVisible && !hasModifiers
+    }
+}
+
+enum ClipboardHistoryNavigation {
+    /// How far a key moves the highlight, or nil when it is not a move.
+    /// Down and Control-N go forward and up and Control-P back in both
+    /// layouts. The cards run left to right, so a plain side arrow walks
+    /// them too; with a modifier, or in the list, it stays with the search
+    /// field's caret.
+    static func step(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, key: String?,
+                     layout: ClipboardHistoryLayout) -> Int? {
+        let sideArrowsMove = modifiers.isEmpty && layout.sideArrowsMoveSelection
+        if keyCode == UInt16(kVK_DownArrow) || (modifiers == [.control] && key == "n")
+            || (sideArrowsMove && keyCode == UInt16(kVK_RightArrow)) {
+            return 1
+        }
+        if keyCode == UInt16(kVK_UpArrow) || (modifiers == [.control] && key == "p")
+            || (sideArrowsMove && keyCode == UInt16(kVK_LeftArrow)) {
+            return -1
+        }
+        return nil
+    }
+}
+
+enum ClipboardHistoryEscape {
+    enum Action: Equatable {
+        case clearBatchSelection
+        case hideWindow
+    }
+
+    /// Esc backs out one layer at a time - selection, then the window.
+    /// Preview is a persistent view setting, not a layer: only clicking its
+    /// own toggle turns it off (or Space, but only once arrow-key navigation
+    /// has made a row's selection visible - see `ClipboardHistoryPreview
+    /// .handlesSpace`; while the search field has focus, Space just types),
+    /// so a keystroke meant to close the panel can never silently re-hide
+    /// it first.
+    static func action(batchCount: Int) -> Action {
+        batchCount > 0 ? .clearBatchSelection : .hideWindow
+    }
+}
+
+enum ClipboardHistoryFocus {
+    /// Which side owns an ordinary key press while a text view holds focus in
+    /// the quick panel. A composing input method always wins: Return confirms
+    /// the candidate, the arrows walk it and Esc drops it, so claiming those
+    /// keys leaves the search field unusable in Chinese, Japanese and Korean.
+    /// Outside composition the multiline editor keeps its editing keys, while
+    /// the search field (a field editor) and the read-only preview leave the
+    /// list's shortcuts intact.
+    static func textViewOwnsKeys(isComposing: Bool, isFieldEditor: Bool, isEditable: Bool) -> Bool {
+        isComposing || (isEditable && !isFieldEditor)
+    }
+}
+
+enum ClipboardHistoryBatch {
+    static func combinedText(_ texts: [String]) -> String {
+        texts.joined(separator: "\n")
+    }
+
+    static func orderedSelectedIndexes<ID: Hashable>(allIDs: [ID], selectedIDs: Set<ID>) -> [Int] {
+        allIDs.indices.filter { selectedIDs.contains(allIDs[$0]) }
+    }
+
+    /// The ids a shift-click covers, Finder style: from the anchor row (the
+    /// last one the user touched) to the clicked one, inclusive, in either
+    /// direction.
+    static func rangeSelectionIDs<ID>(allIDs: [ID], anchor: Int, target: Int) -> [ID] {
+        guard !allIDs.isEmpty else { return [] }
+        let low = min(max(min(anchor, target), 0), allIDs.count - 1)
+        let high = min(max(max(anchor, target), 0), allIDs.count - 1)
+        return Array(allIDs[low...high])
+    }
+
+    /// How a multi-item selection travels on the pasteboard. A selection made
+    /// only of file items pastes as the files themselves, so Finder receives
+    /// real files. A selection with any image in it pastes as rich text with
+    /// the images embedded (Notes, Mail and TextEdit take both together),
+    /// with the text parts doubling as the plain-text fallback. Anything else
+    /// combines as text, file items contributing their paths.
+    enum PasteMode: Equatable {
+        case files([String])
+        case text(String)
+        case rich([RichPart])
+    }
+
+    enum RichPart: Equatable {
+        case text(String)
+        /// The image store file name for an `.image` entry.
+        case image(String)
+    }
+
+    static func pasteMode(for entries: [ClipboardHistoryEntry]) -> PasteMode? {
+        guard !entries.isEmpty else { return nil }
+        if entries.allSatisfy({ $0.kind == .files }) {
+            return .files(entries.flatMap(\.filePaths))
+        }
+        if entries.contains(where: { $0.kind == .image }) {
+            let parts = entries.compactMap { entry -> RichPart? in
+                switch entry.kind {
+                case .text: return .text(entry.text)
+                case .files: return .text(entry.filePaths.joined(separator: "\n"))
+                case .image: return entry.imageFile.map(RichPart.image)
+                }
+            }
+            return parts.isEmpty ? nil : .rich(parts)
+        }
+        let texts = entries.map { entry in
+            entry.kind == .files ? entry.filePaths.joined(separator: "\n") : entry.text
+        }
+        return .text(combinedText(texts))
+    }
+
+    /// Whether a window-level ⌘C/⌘A belongs to the entry list instead of the
+    /// search field. Only an explicit multi-selection claims the shortcut:
+    /// arrow-key highlight alone must not steal copy or select-all from text
+    /// editing in the field (⇧Enter still copies the highlighted row).
+    /// ⌘A additionally falls to the list while the query is empty, where the
+    /// field has nothing to select.
+    static func listOwnsCopyShortcut(batchCount: Int) -> Bool {
+        batchCount > 0
+    }
+
+    static func listOwnsSelectAllShortcut(batchCount: Int, queryIsEmpty: Bool) -> Bool {
+        batchCount > 0 || queryIsEmpty
+    }
+
+    static func listOwnsDeleteShortcut(batchCount: Int) -> Bool {
+        batchCount > 0
+    }
+
+    /// The plain-text side of a rich batch, for targets that only take text.
+    static func richPlainText(_ parts: [RichPart]) -> String {
+        combinedText(parts.compactMap { part in
+            if case let .text(text) = part { return text }
+            return nil
+        })
+    }
+}
+
+enum ClipboardHistoryCapturePolicy {
+    static func isCopiedScreenshot(_ paths: [String], in directory: URL?) -> Bool {
+        guard paths.count == 1,
+              let directory else { return false }
+        return ScreenshotSupport.isCopiedScreenshot(URL(fileURLWithPath: paths[0]), in: directory)
+    }
+}
+
+enum ClipboardHistoryPasteboardText {
+    static func preferredText(webURLString: String?, plainText: String?) -> String? {
+        let plain = trimmed(plainText)
+        if let plain,
+           let normalizedPlain = normalizedWebURL(plain) {
+            return normalizedPlain
+        }
+
+        guard let webURL = normalizedWebURL(webURLString) else { return plain }
+        guard let plain else { return webURL }
+        return shouldPreferWebURL(webURL, over: plain) ? webURL : plain
+    }
+
+    private static func shouldPreferWebURL(_ webURL: String, over plain: String) -> Bool {
+        guard !plain.contains(where: \.isWhitespace) else { return false }
+        if plain.hasPrefix("//") { return true }
+        let stripped = stripWebScheme(webURL)
+        return plain == stripped.withSlashes || plain == stripped.withoutSlashes
+    }
+
+    private static func normalizedWebURL(_ raw: String?) -> String? {
+        guard let text = trimmed(raw),
+              // A copy of several links keeps them apart with a line break, a
+              // spreadsheet cell tab, or a space before the next word, and
+              // `url` escapes all three the same way, taking the whole copy as
+              // one link; `trimmed` has already dropped the outer ones.
+              !text.contains(where: \.isWhitespace),
+              let url = URL(string: text),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              url.host != nil else {
+            return nil
+        }
+        return url.absoluteString
+    }
+
+    private static func stripWebScheme(_ value: String) -> (withSlashes: String, withoutSlashes: String) {
+        let lower = value.lowercased()
+        let withSlashes: String
+        if lower.hasPrefix("http://") {
+            withSlashes = "//" + String(value.dropFirst("http://".count))
+        } else if lower.hasPrefix("https://") {
+            withSlashes = "//" + String(value.dropFirst("https://".count))
+        } else {
+            withSlashes = value
+        }
+        return (withSlashes, String(withSlashes.drop { $0 == "/" }))
+    }
+
+    private static func trimmed(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+}
+
+extension NSPasteboard.PasteboardType {
+    /// The nspasteboard.org mark naming the app that wrote the pasteboard,
+    /// read beside the concealed mark below.
+    static let source = NSPasteboard.PasteboardType("org.nspasteboard.source")
+    /// Added by the system to a copy that arrived from another device over
+    /// Universal Clipboard, which no app on this Mac made.
+    static let remoteClipboard = NSPasteboard.PasteboardType("com.apple.is-remote-clipboard")
+}
+
+extension NSPasteboard {
+    /// Signs a write SasNotch makes for itself (copied OCR text, a Command
+    /// Bar answer, a color), so the clipboard history does not credit it to
+    /// whichever app happens to be in front. Called once the pasteboard is
+    /// cleared, before or after the content: either way the mark joins the
+    /// single item instead of adding one.
+    func declareSasNotchSource() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        setString(bundleID, forType: .source)
+    }
+}
+
+enum ClipboardHistorySensitiveText {
+    /// The mark an app puts on the pasteboard to say the content is a secret
+    /// and must not be recorded anywhere. It is a shared convention rather
+    /// than a system feature, and the apps that keep passwords write it when
+    /// they hand one over, so honoring it is the only way to leave a password
+    /// out that does not depend on guessing what the text looks like.
+    static let concealedPasteboardType = "org.nspasteboard.ConcealedType"
+
+    /// Whether the pasteboard is carrying that mark. `NSPasteboard.types`
+    /// already gathers the types of every item on it, so one read covers a
+    /// mark written on its own item as well as one written next to the text.
+    static func isConcealed(_ types: [String]) -> Bool {
+        types.contains(concealedPasteboardType)
+    }
+
+    /// The marks an app puts on content it is about to take back, or that it
+    /// made up rather than the person copying it: a dictation app pasting
+    /// what it heard, for one. Neither is a copy worth keeping.
+    static let transientPasteboardTypes: Set<String> = [
+        "org.nspasteboard.TransientType", "org.nspasteboard.AutoGeneratedType",
+    ]
+
+    static func isTransient(_ types: [String]) -> Bool {
+        types.contains(where: transientPasteboardTypes.contains)
+    }
+
+    // A mention of "token" in a command, error or source code is not a
+    // credential. Require a named field with a nonempty value, including
+    // environment variables, quoted JSON keys, Authorization headers and
+    // explicit command-line options such as --password VALUE.
+    // Horizontal whitespace keeps an empty assignment from consuming the
+    // next line of terminal output. Compile once for repeated clipboard reads.
+    private static let credentialName = #"(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|authorization)"#
+    // Key names often go on past the credential word, as in SECRET_KEY,
+    // aws_secret_access_key, secretKey, SECRET_KEY_BASE, password_confirmation
+    // or PASSWORD_2. Only these endings count, so max_tokens or token_count
+    // stay ordinary text.
+    private static let credentialEnding = #"(?:[_-]?(?:access[_-]?)?key(?:[_-]?base)?|[_-]?confirmation|[_-]?\d{1,3})?"#
+    private static let credentialAssignment = try? NSRegularExpression(
+        pattern: #"(?<![\w-])(?:[\w-]*\#(credentialName)\#(credentialEnding)["']?[ \t]*[:=][ \t]*|--[\w-]*\#(credentialName)\#(credentialEnding)[ \t]+)["']?[^\s"'`,;{}\[\]]"#,
+        options: [.caseInsensitive]
+    )
+
+    static func looksSensitive(_ text: String) -> Bool {
+        if credentialAssignment?.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil {
+            return true
+        }
+        if isWebURL(text) { return false }
+        // An identifier code is nobody's secret, and it fits the shape below
+        // exactly: long, unbroken, letters and digits with dashes between
+        // them. Copying one around is ordinary work, so it stays (issue #423).
+        if isIdentifierCode(text) { return false }
+
+        guard text.count >= 20, text.count <= 160, !text.contains(where: { $0.isWhitespace }) else {
+            return false
+        }
+        let hasLetter = text.contains { $0.isLetter }
+        let hasDigit = text.contains { $0.isNumber }
+        let hasSymbol = text.contains { !$0.isLetter && !$0.isNumber && !$0.isWhitespace }
+        return hasLetter && hasDigit && hasSymbol
+    }
+
+    /// The one shape every system uses for a generated identifier: thirty-two
+    /// hex digits in five dashed groups, optionally wrapped in braces. Kept
+    /// strict on purpose, so nothing that merely resembles one gets a pass.
+    private static func isIdentifierCode(_ text: String) -> Bool {
+        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("{"), value.hasSuffix("}") {
+            value = String(value.dropFirst().dropLast())
+        }
+        let groups = value.split(separator: "-", omittingEmptySubsequences: false)
+        guard groups.map(\.count) == [8, 4, 4, 4, 12] else { return false }
+        return groups.allSatisfy { $0.allSatisfy(\.isHexDigit) }
+    }
+
+    private static func isWebURL(_ text: String) -> Bool {
+        guard let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let scheme = url.scheme?.lowercased(),
+              (scheme == "http" || scheme == "https"),
+              url.host != nil else {
+            return false
+        }
+        return true
+    }
+}
+
+enum ClipboardHistoryImageSupport {
+    static func editorImage(for entry: ClipboardHistoryEntry, directory: URL) -> NSImage? {
+        guard entry.kind == .image, let name = entry.imageFile,
+              !name.isEmpty, (name as NSString).lastPathComponent == name
+        else { return nil }
+        return NSImage(contentsOf: directory.appendingPathComponent(name))
+    }
+
+    static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "heic", "heif", "tiff", "tif", "gif", "webp", "bmp", "ico", "icns", "svg", "avif"
+    ]
+
+    static func isImageFileName(_ name: String) -> Bool {
+        let ext = (name as NSString).pathExtension.lowercased()
+        return imageExtensions.contains(ext)
+    }
+
+    static func isImageFilePath(_ path: String, fileManager: FileManager = .default) -> Bool {
+        guard isImageFileName(path) else { return false }
+        return fileManager.fileExists(atPath: path)
+    }
+}

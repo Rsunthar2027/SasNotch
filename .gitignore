@@ -1,0 +1,38 @@
+# Upstream clones used for study only
+reference/
+
+# Build artifacts
+build/
+dist/
+.build/
+DerivedData/
+*.dmg
+*.zip
+
+# Xcode / SwiftPM user state
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+
+# Signing material and secrets: never commit private keys, certificates or tokens
+*.p12
+*.pem
+*.cer
+*.p8
+*.key
+*.mobileprovision
+*.keychain-db
+*.provisionprofile
+sparkle_private_key*
+.env
+.env.*
+
+# Local-only working notes
+AGENTS.md
+CLAUDE.md
+
+# macOS noise
+.DS_Store
+
+# Logs
+*.log

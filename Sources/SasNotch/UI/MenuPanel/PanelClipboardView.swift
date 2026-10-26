@@ -1,0 +1,326 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Vorssaint
+// Modified for SasNotch by SasNotch contributors, 2026
+
+import SwiftUI
+
+struct PanelClipboardView: View {
+    @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var history = ClipboardHistoryService.shared
+    @AppStorage(DefaultsKey.clipboardHistoryEnabled) private var enabled = false
+    @AppStorage(DefaultsKey.clipboardHistoryShortcutEnabled) private var shortcutEnabled = true
+    @State private var query = ""
+    @State private var copiedID: UUID?
+    /// Counts copies, so the list also follows an entry copied again while
+    /// it still carries the tick.
+    @State private var copyCount = 0
+    @State private var clearingIDs: [UUID: Date]?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.notchPresentation) private var inNotch
+
+    var onClose: () -> Void
+
+    private var text: ClipboardFeatureStrings {
+        FeatureStrings.clipboard(l10n.language)
+    }
+
+    /// The alert would hang from the island as a sheet; there it asks on its own.
+    private func confirmClearAboveIsland(_ ids: [UUID: Date]) {
+        let text = text
+        DispatchQueue.main.async {
+            guard NSAlert.confirmAboveIsland(String(format: text.clearRecentConfirmFormat, ids.count),
+                                             message: text.clearRecentConfirmMessage,
+                                             action: text.clearRecent, destructive: true,
+                                             cancel: text.cancel) else { return }
+            history.clearRecent(ids)
+            copiedID = nil
+        }
+    }
+
+    private var filteredEntries: [ClipboardHistoryEntry] {
+        history.filteredEntries(matching: query)
+    }
+
+    private var canReorderEntries: Bool {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var searchTokens: [String] {
+        ClipboardHistorySearch.searchTokens(for: query)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            controls
+            entriesList
+        }
+        .onAppear { PanelInteractionState.shared.viewKeepsPopoverOpen = true }
+        .onDisappear { PanelInteractionState.shared.viewKeepsPopoverOpen = false }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Label(text.title, systemImage: "doc.on.clipboard")
+                .font(.system(size: 12, weight: .semibold))
+            Spacer()
+            Button(action: onClose) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .help(l10n.s.uninstallerCancel)
+        }
+    }
+
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Toggle(text.enable, isOn: $enabled)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 11.5, weight: .medium))
+                .onChange(of: enabled) { _, _ in
+                    ClipboardHistoryService.shared.syncWithPreferences()
+                }
+            Text(enabled ? text.caption : text.disabled)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if enabled, shortcutEnabled {
+                Text("\(text.shortcut): \(shortcut.displayString)")
+                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                    .foregroundStyle(.tertiary)
+            }
+            HStack(spacing: 6) {
+                TextField(text.search, text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11))
+                    .disabled(history.entries.isEmpty)
+                Button {
+                    let ids = history.recentEntriesSnapshot
+                    if inNotch { confirmClearAboveIsland(ids) } else { clearingIDs = ids }
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 24, height: 22)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .help(text.clearRecent)
+                .disabled(history.recentEntries.isEmpty)
+                .modifier(ClipboardClearRecentConfirmation(entryIDs: $clearingIDs))
+                Button {
+                    history.showHistoryWindow()
+                } label: {
+                    Image(systemName: "arrow.up.forward.app")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 24, height: 22)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .help(text.shortcut)
+            }
+        }
+        .panelCard()
+    }
+
+    @ViewBuilder
+    private var entriesList: some View {
+        if history.entries.isEmpty {
+            emptyState(text.empty)
+        } else if filteredEntries.isEmpty {
+            emptyState(text.noResults)
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    // Lazy: a large history would otherwise build every row, and
+                    // decode every image thumbnail, each time the panel opens.
+                    LazyVStack(alignment: .leading, spacing: 7) {
+                        ForEach(filteredEntries) { entry in
+                            entryRow(entry)
+                                .id(entry.id)
+                        }
+                    }
+                }
+                .frame(maxHeight: 260)
+                // A copied recent entry moves to the top, so the list follows
+                // it and the tick stays in view.
+                .onChange(of: copyCount) { _, _ in
+                    guard let id = copiedID else { return }
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { proxy.scrollTo(id) }
+                }
+            }
+        }
+    }
+
+    private func emptyState(_ message: String) -> some View {
+        Text(message)
+            .font(.system(size: 10.5))
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 72)
+            .panelCard()
+    }
+
+    private var shortcut: GlobalShortcut {
+        GlobalShortcut.saved(for: DefaultsKey.clipboardHistoryShortcut,
+                             fallback: .clipboardDefault)
+    }
+
+    @ViewBuilder
+    private func entryPreview(_ entry: ClipboardHistoryEntry) -> some View {
+        switch entry.kind {
+        case .text:
+            // Deliberately not selectable: clicking a selectable Text swaps in
+            // the selection renderer, which lays the whole preview out and
+            // ignores the line limit, so a long entry paints over the rows
+            // below it. The history window shows the full, selectable text.
+            HStack(alignment: .center, spacing: 7) {
+                if let color = entry.color {
+                    ColorSwatch(color: color, size: 12)
+                }
+                SearchHighlightText.text(entry.preview, tokens: searchTokens, fontSize: 10.5)
+                    .font(.system(size: 10.5))
+                    .lineLimit(3)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .image:
+            HStack(alignment: .center, spacing: 7) {
+                if let name = entry.imageFile {
+                    ClipboardThumbnailImage(source: .stored(name: name),
+                                            aspectRatio: entry.imageAspectRatio)
+                        .frame(maxWidth: 110, maxHeight: 40)
+                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                }
+                SearchHighlightText.text("\(text.imageEntryLabel) · \(entry.imageDimensionsLabel)",
+                                         tokens: searchTokens, fontSize: 10)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        case .files:
+            if entry.filePaths.count == 1,
+               let path = entry.filePaths.first,
+               ClipboardImageStore.isImageFile(atPath: path) {
+                HStack(alignment: .center, spacing: 7) {
+                    ClipboardThumbnailImage(source: .file(path: path),
+                                            aspectRatio: ClipboardImageStore.imageAspectRatio(atPath: path))
+                        .frame(maxWidth: 110, maxHeight: 40)
+                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    SearchHighlightText.text(entry.fileNames.first ?? entry.preview, tokens: searchTokens, fontSize: 10.5)
+                        .font(.system(size: 10.5))
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+                .help(path)
+            } else {
+                HStack(alignment: .center, spacing: 7) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    // A count of several files is no text the search reads.
+                    SearchHighlightText.text(entry.filePaths.count == 1
+                                                ? (entry.fileNames.first ?? entry.preview)
+                                                : String(format: text.fileCountFormat, entry.filePaths.count),
+                                             tokens: entry.filePaths.count == 1 ? searchTokens : [],
+                                             fontSize: 10.5)
+                        .font(.system(size: 10.5))
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+                .help(entry.filePaths.joined(separator: "\n"))
+            }
+        }
+    }
+
+    private func entryRow(_ entry: ClipboardHistoryEntry) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if entry.isPinned {
+                Label(text.pinned, systemImage: "pin.fill")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            entryPreview(entry)
+            HStack(spacing: 6) {
+                Button {
+                    history.move(entry, .up)
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .help(text.moveUp)
+                .disabled(!canReorderEntries || !history.canMove(entry, .up))
+                Button {
+                    history.move(entry, .down)
+                } label: {
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .help(text.moveDown)
+                .disabled(!canReorderEntries || !history.canMove(entry, .down))
+                Button {
+                    history.togglePin(entry)
+                } label: {
+                    Image(systemName: entry.isPinned ? "pin.slash" : "pin")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .help(entry.isPinned ? text.unpin : text.pin)
+                if entry.kind == .image, AppFeature.screenshot.isAvailable {
+                    Button { history.editImage(entry) } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .help(text.edit)
+                    .accessibilityLabel(text.edit)
+                }
+                Button {
+                    // A copied recent entry moves to the top, so the second
+                    // click of a double click would copy whichever entry took
+                    // its place.
+                    if let event = NSApp.currentEvent, [.leftMouseDown, .leftMouseUp].contains(event.type),
+                       event.clickCount > 1 { return }
+                    // The tick means "it is on the clipboard", so it waits for
+                    // the write instead of announcing one still queued behind
+                    // a stalled pasteboard provider.
+                    history.copy(entry) { copied in
+                        if copied {
+                            copiedID = entry.id
+                            copyCount += 1
+                        } else {
+                            NSSound.beep()
+                        }
+                    }
+                } label: {
+                    Label(copiedID == entry.id ? text.copied : text.copy,
+                          systemImage: copiedID == entry.id ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.mini)
+                Button {
+                    history.remove(entry)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .help(text.delete)
+                Spacer()
+                Text(entry.copiedAt, style: .time)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .panelCard()
+    }
+}

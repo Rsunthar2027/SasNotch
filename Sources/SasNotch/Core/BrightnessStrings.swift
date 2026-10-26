@@ -1,0 +1,655 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Vorssaint
+// Modified for SasNotch by SasNotch contributors, 2026
+
+import Foundation
+
+/// Strings for the display brightness feature. Same contract as the other
+/// FeatureStrings structs: memberwise init in declaration order, one static
+/// per language, all in this file.
+struct BrightnessFeatureStrings {
+    let pageTitle: String
+    let hubDescription: String
+    let enable: String
+    let enableCaption: String
+    let externalCaption: String
+    let noDisplays: String
+    let displayOff: String
+    let turnOffDisplay: String
+    let turnOnDisplay: String
+    let lastDisplayCaption: String
+    let switchUnavailable: String
+    let switchFailed: String
+    let openLidToEnable: String
+    let keysToggle: String
+    let keysCaption: String
+    let keyStep: String
+    let keyStepCaption: String
+    let keyStepStandard: String
+    let keyStepHalf: String
+    let keyStepQuarter: String
+    let osdToggle: String
+    let osdCaption: String
+    let displayBrightnessShortcuts: String
+    let displayBrightnessShortcutCaption: String
+    let displayBrightnessDecrease: String
+    let displayBrightnessIncrease: String
+    let keyboardLight: String
+    let keyboardLightCaption: String
+    let keyboardBrightnessShortcuts: String
+    let keyboardBrightnessDecrease: String
+    let keyboardBrightnessIncrease: String
+    let softwareDimming: String
+    let extendedDimming: String
+    let islandPromptTitle: String
+    let islandPromptMessage: String
+    let islandPromptKeepOff: String
+}
+
+extension FeatureStrings {
+    static func brightness(_ language: AppLanguage) -> BrightnessFeatureStrings {
+        switch language {
+        case .enUS: return .enUS
+        case .ptBR: return .ptBR
+        case .tr: return .tr
+        case .ru: return .ru
+        case .es: return .es
+        case .sk: return .sk
+        case .de: return .de
+        case .fr: return .fr
+        case .it: return .it
+        case .ja: return .ja
+        case .ko: return .ko
+        case .zhHans: return .zhHans
+        case .zhTW: return .zhTW
+        case .zhHK: return .zhHK
+        case .uk: return .uk
+        }
+    }
+}
+
+extension BrightnessFeatureStrings {
+    static let enUS = BrightnessFeatureStrings(
+        pageTitle: "Displays",
+        hubDescription: "Brightness and power controls for every display",
+        enable: "Control displays",
+        enableCaption: "Brightness and on or off controls for the built-in and external displays, here and in the menu bar panel.",
+        externalCaption: "External displays are adjusted through the same protocol as their own buttons. When the connection cannot carry it, as with HDMI adapters, the slider dims the picture instead, so brightness control works either way.",
+        noDisplays: "No display found.",
+        displayOff: "Off",
+        turnOffDisplay: "Turn off display",
+        turnOnDisplay: "Turn on display",
+        lastDisplayCaption: "At least one display must stay on.",
+        switchUnavailable: "Display switching is unavailable on this Mac.",
+        switchFailed: "Could not change this display.",
+        openLidToEnable: "Open the lid to turn on the built-in display.",
+        keysToggle: "Brightness keys follow the pointer",
+        keysCaption: "The keyboard brightness keys change the display under the pointer.",
+        keyStep: "Brightness key steps",
+        keyStepCaption: "Smaller steps for each press of the brightness keys and display brightness shortcuts.",
+        keyStepStandard: "Standard",
+        keyStepHalf: "Half steps",
+        keyStepQuarter: "Quarter steps",
+        osdToggle: "Show brightness when adjusting",
+        osdCaption: "Shows the brightness percentage when you use the brightness keys or sliders.",
+        displayBrightnessShortcuts: "Use display brightness shortcuts",
+        displayBrightnessShortcutCaption: "Shortcuts adjust the primary display, or the display under the pointer when pointer following is on.",
+        displayBrightnessDecrease: "Decrease display brightness",
+        displayBrightnessIncrease: "Increase display brightness",
+        keyboardLight: "Keyboard light",
+        keyboardLightCaption: "Turns the keyboard backlight on or off.",
+        keyboardBrightnessShortcuts: "Use keyboard brightness shortcuts",
+        keyboardBrightnessDecrease: "Decrease keyboard brightness",
+        keyboardBrightnessIncrease: "Increase keyboard brightness",
+        softwareDimming: "Dim the picture",
+        extendedDimming: "Extra dimming",
+        islandPromptTitle: "Show brightness in the Dynamic Island?",
+        islandPromptMessage: "The Dynamic Island shows brightness changes only while “Control displays” is on in Displays settings.",
+        islandPromptKeepOff: "Keep Off"
+    )
+
+    static let ptBR = BrightnessFeatureStrings(
+        pageTitle: "Telas",
+        hubDescription: "Brilho e controles para ligar ou desligar cada tela",
+        enable: "Controlar telas",
+        enableCaption: "Controles de brilho e de ligar ou desligar para a tela do Mac e monitores externos, aqui e no painel da barra de menus.",
+        externalCaption: "Monitores externos são ajustados pelo mesmo protocolo dos botões do próprio monitor. Quando a conexão não transmite esse protocolo, como em adaptadores HDMI, o controle escurece a imagem, então o ajuste funciona de qualquer forma.",
+        noDisplays: "Nenhuma tela encontrada.",
+        displayOff: "Desligada",
+        turnOffDisplay: "Desligar tela",
+        turnOnDisplay: "Ligar tela",
+        lastDisplayCaption: "Pelo menos uma tela deve continuar ligada.",
+        switchUnavailable: "Não é possível ligar ou desligar telas neste Mac.",
+        switchFailed: "Não foi possível alterar esta tela.",
+        openLidToEnable: "Abra a tampa para ligar a tela integrada.",
+        keysToggle: "Teclas de brilho seguem o ponteiro",
+        keysCaption: "As teclas de brilho do teclado mudam a tela onde o ponteiro está.",
+        keyStep: "Passos das teclas de brilho",
+        keyStepCaption: "Passos menores ao pressionar as teclas de brilho e os atalhos de brilho da tela.",
+        keyStepStandard: "Padrão",
+        keyStepHalf: "Meio passo",
+        keyStepQuarter: "Um quarto de passo",
+        osdToggle: "Mostrar brilho ao ajustar",
+        osdCaption: "Mostra a porcentagem de brilho ao usar as teclas ou os controles de brilho.",
+        displayBrightnessShortcuts: "Usar atalhos para o brilho da tela",
+        displayBrightnessShortcutCaption: "Os atalhos ajustam a tela principal ou a tela sob o cursor quando a opção de seguir o cursor está ativada.",
+        displayBrightnessDecrease: "Diminuir brilho da tela",
+        displayBrightnessIncrease: "Aumentar brilho da tela",
+        keyboardLight: "Luz do teclado",
+        keyboardLightCaption: "Liga ou desliga a luz do teclado.",
+        keyboardBrightnessShortcuts: "Usar atalhos para o brilho do teclado",
+        keyboardBrightnessDecrease: "Diminuir brilho do teclado",
+        keyboardBrightnessIncrease: "Aumentar brilho do teclado",
+        softwareDimming: "Escurecer a imagem",
+        extendedDimming: "Escurecimento extra",
+        islandPromptTitle: "Mostrar o brilho na Dynamic Island?",
+        islandPromptMessage: "A Dynamic Island só mostra mudanças de brilho quando “Controlar telas” está ativado nos ajustes de Telas.",
+        islandPromptKeepOff: "Manter desativado"
+    )
+
+    static let tr = BrightnessFeatureStrings(
+        pageTitle: "Ekranlar",
+        hubDescription: "Tüm ekranlar için parlaklık ve güç denetimleri",
+        enable: "Ekranları denetle",
+        enableCaption: "Yerleşik ekran ve harici monitörler için parlaklık ve açma kapatma denetimleri, burada ve menü çubuğu panelinde.",
+        externalCaption: "Harici monitörler, kendi düğmelerinin kullandığı protokolle ayarlanır. Bağlantı bu protokolü taşıyamadığında, örneğin HDMI adaptörlerinde, kaydırıcı bunun yerine görüntüyü karartır; parlaklık denetimi her durumda çalışır.",
+        noDisplays: "Ekran bulunamadı.",
+        displayOff: "Kapalı",
+        turnOffDisplay: "Ekranı kapat",
+        turnOnDisplay: "Ekranı aç",
+        lastDisplayCaption: "En az bir ekran açık kalmalıdır.",
+        switchUnavailable: "Bu Mac’te ekran açma ve kapatma kullanılamıyor.",
+        switchFailed: "Bu ekran değiştirilemedi.",
+        openLidToEnable: "Yerleşik ekranı açmak için kapağı açın.",
+        keysToggle: "Parlaklık tuşları imleci izler",
+        keysCaption: "Klavyedeki parlaklık tuşları imlecin bulunduğu ekranı değiştirir.",
+        keyStep: "Parlaklık tuşu adımları",
+        keyStepCaption: "Parlaklık tuşlarına ve ekran parlaklığı kısayollarına her basışta daha küçük adımlar.",
+        keyStepStandard: "Standart",
+        keyStepHalf: "Yarım adım",
+        keyStepQuarter: "Çeyrek adım",
+        osdToggle: "Parlaklık ayarlanırken göster",
+        osdCaption: "Parlaklık tuşlarını veya kaydırıcıları kullandığınızda parlaklık yüzdesini gösterir.",
+        displayBrightnessShortcuts: "Ekran parlaklığı kısayollarını kullan",
+        displayBrightnessShortcutCaption: "Kısayollar ana ekranı veya işaretçiyi izleme açıkken işaretçinin altındaki ekranı ayarlar.",
+        displayBrightnessDecrease: "Ekran parlaklığını azalt",
+        displayBrightnessIncrease: "Ekran parlaklığını artır",
+        keyboardLight: "Klavye ışığı",
+        keyboardLightCaption: "Klavye ışığını açar veya kapatır.",
+        keyboardBrightnessShortcuts: "Klavye parlaklığı kısayollarını kullan",
+        keyboardBrightnessDecrease: "Klavye parlaklığını azalt",
+        keyboardBrightnessIncrease: "Klavye parlaklığını artır",
+        softwareDimming: "Görüntüyü karart",
+        extendedDimming: "Ek karartma",
+        islandPromptTitle: "Parlaklık Dynamic Island’da gösterilsin mi?",
+        islandPromptMessage: "Dynamic Island, parlaklık değişikliklerini yalnızca Ekranlar ayarlarında “Ekranları denetle” açıkken gösterir.",
+        islandPromptKeepOff: "Kapalı kalsın"
+    )
+
+    static let ru = BrightnessFeatureStrings(
+        pageTitle: "Экраны",
+        hubDescription: "Яркость и включение всех экранов",
+        enable: "Управлять экранами",
+        enableCaption: "Настройки яркости и включения встроенного экрана и внешних мониторов здесь и в панели строки меню.",
+        externalCaption: "Внешние мониторы настраиваются тем же протоколом, что и их собственные кнопки. Если соединение не передаёт этот протокол, например через адаптеры HDMI, ползунок затемняет изображение, так что регулировка работает в любом случае.",
+        noDisplays: "Экраны не найдены.",
+        displayOff: "Выключен",
+        turnOffDisplay: "Выключить экран",
+        turnOnDisplay: "Включить экран",
+        lastDisplayCaption: "Хотя бы один экран должен оставаться включённым.",
+        switchUnavailable: "Управление включением экранов недоступно на этом Mac.",
+        switchFailed: "Не удалось изменить состояние экрана.",
+        openLidToEnable: "Откройте крышку, чтобы включить встроенный экран.",
+        keysToggle: "Клавиши яркости следуют за указателем",
+        keysCaption: "Клавиши яркости на клавиатуре меняют экран, на котором находится указатель.",
+        keyStep: "Шаг клавиш яркости",
+        keyStepCaption: "Более мелкие шаги при каждом нажатии клавиш яркости и сочетаний клавиш для яркости экрана.",
+        keyStepStandard: "Стандартный",
+        keyStepHalf: "Половина шага",
+        keyStepQuarter: "Четверть шага",
+        osdToggle: "Показывать яркость при регулировке",
+        osdCaption: "Показывает яркость в процентах при использовании клавиш или ползунков яркости.",
+        displayBrightnessShortcuts: "Использовать сочетания клавиш для яркости экрана",
+        displayBrightnessShortcutCaption: "Сочетания клавиш меняют яркость основного экрана или экрана под указателем, если включено следование за указателем.",
+        displayBrightnessDecrease: "Уменьшить яркость экрана",
+        displayBrightnessIncrease: "Увеличить яркость экрана",
+        keyboardLight: "Подсветка клавиатуры",
+        keyboardLightCaption: "Включает или выключает подсветку клавиатуры.",
+        keyboardBrightnessShortcuts: "Использовать сочетания клавиш для подсветки клавиатуры",
+        keyboardBrightnessDecrease: "Уменьшить яркость клавиатуры",
+        keyboardBrightnessIncrease: "Увеличить яркость клавиатуры",
+        softwareDimming: "Затемнять изображение",
+        extendedDimming: "Дополнительное затемнение",
+        islandPromptTitle: "Показывать яркость в Dynamic Island?",
+        islandPromptMessage: "Dynamic Island показывает изменения яркости, только когда в настройках «Экраны» включено «Управлять экранами».",
+        islandPromptKeepOff: "Оставить выключенным"
+    )
+
+    static let es = BrightnessFeatureStrings(
+        pageTitle: "Pantallas",
+        hubDescription: "Brillo y encendido para todas las pantallas",
+        enable: "Controlar las pantallas",
+        enableCaption: "Controles de brillo y encendido para la pantalla integrada y los monitores externos, aquí y en el panel de la barra de menús.",
+        externalCaption: "Los monitores externos se ajustan con el mismo protocolo que sus propios botones. Cuando la conexión no transmite ese protocolo, como con adaptadores HDMI, el control oscurece la imagen, así que el ajuste funciona igualmente.",
+        noDisplays: "No se encontró ninguna pantalla.",
+        displayOff: "Apagada",
+        turnOffDisplay: "Apagar pantalla",
+        turnOnDisplay: "Encender pantalla",
+        lastDisplayCaption: "Al menos una pantalla debe permanecer encendida.",
+        switchUnavailable: "El encendido de pantallas no está disponible en este Mac.",
+        switchFailed: "No se pudo cambiar esta pantalla.",
+        openLidToEnable: "Abre la tapa para encender la pantalla integrada.",
+        keysToggle: "Las teclas de brillo siguen al puntero",
+        keysCaption: "Las teclas de brillo del teclado cambian la pantalla donde está el puntero.",
+        keyStep: "Pasos de las teclas de brillo",
+        keyStepCaption: "Pasos más pequeños con cada pulsación de las teclas de brillo y de los atajos para el brillo de la pantalla.",
+        keyStepStandard: "Estándar",
+        keyStepHalf: "Medio paso",
+        keyStepQuarter: "Un cuarto de paso",
+        osdToggle: "Mostrar el brillo al ajustarlo",
+        osdCaption: "Muestra el porcentaje de brillo al usar las teclas o los controles de brillo.",
+        displayBrightnessShortcuts: "Usar atajos para el brillo de la pantalla",
+        displayBrightnessShortcutCaption: "Los atajos ajustan la pantalla principal o la pantalla bajo el puntero cuando está activado el seguimiento del puntero.",
+        displayBrightnessDecrease: "Reducir el brillo de la pantalla",
+        displayBrightnessIncrease: "Aumentar el brillo de la pantalla",
+        keyboardLight: "Luz del teclado",
+        keyboardLightCaption: "Enciende o apaga la luz del teclado.",
+        keyboardBrightnessShortcuts: "Usar atajos para el brillo del teclado",
+        keyboardBrightnessDecrease: "Reducir el brillo del teclado",
+        keyboardBrightnessIncrease: "Aumentar el brillo del teclado",
+        softwareDimming: "Oscurecer la imagen",
+        extendedDimming: "Atenuación adicional",
+        islandPromptTitle: "¿Mostrar el brillo en el Dynamic Island?",
+        islandPromptMessage: "El Dynamic Island solo muestra los cambios de brillo cuando “Controlar las pantallas” está activado en los ajustes de Pantallas.",
+        islandPromptKeepOff: "Mantener desactivado"
+    )
+
+    static let sk = BrightnessFeatureStrings(
+        pageTitle: "Displeje",
+        hubDescription: "Jas a zapínanie pre všetky displeje",
+        enable: "Ovládať displeje",
+        enableCaption: "Ovládanie jasu a zapínania pre vstavaný displej a externé monitory, tu aj v paneli v lište.",
+        externalCaption: "Externé monitory sa upravujú rovnakým protokolom ako ich vlastné tlačidlá. Keď ho pripojenie nedokáže preniesť, napríklad pri HDMI adaptéroch, posuvník namiesto toho stmaví obraz, takže ovládanie jasu funguje vždy.",
+        noDisplays: "Nenašiel sa žiadny displej.",
+        displayOff: "Vypnutý",
+        turnOffDisplay: "Vypnúť displej",
+        turnOnDisplay: "Zapnúť displej",
+        lastDisplayCaption: "Aspoň jeden displej musí zostať zapnutý.",
+        switchUnavailable: "Prepínanie displejov nie je na tomto Macu dostupné.",
+        switchFailed: "Tento displej sa nepodarilo zmeniť.",
+        openLidToEnable: "Otvorte veko, aby ste zapli vstavaný displej.",
+        keysToggle: "Klávesy jasu sledujú kurzor",
+        keysCaption: "Klávesy jasu na klávesnici menia displej pod kurzorom.",
+        keyStep: "Krok klávesov jasu",
+        keyStepCaption: "Menšie kroky pri každom stlačení klávesov jasu a klávesových skratiek pre jas displeja.",
+        keyStepStandard: "Štandardný",
+        keyStepHalf: "Polovičný krok",
+        keyStepQuarter: "Štvrtinový krok",
+        osdToggle: "Zobraziť jas pri úprave",
+        osdCaption: "Zobrazuje percento jasu pri použití klávesov alebo posuvníkov jasu.",
+        displayBrightnessShortcuts: "Používať klávesové skratky pre jas displeja",
+        displayBrightnessShortcutCaption: "Skratky upravujú hlavný displej, alebo displej pod kurzorom, ak je zapnuté sledovanie kurzora.",
+        displayBrightnessDecrease: "Znížiť jas displeja",
+        displayBrightnessIncrease: "Zvýšiť jas displeja",
+        keyboardLight: "Podsvietenie klávesnice",
+        keyboardLightCaption: "Zapína alebo vypína podsvietenie klávesnice.",
+        keyboardBrightnessShortcuts: "Používať klávesové skratky pre jas klávesnice",
+        keyboardBrightnessDecrease: "Znížiť jas klávesnice",
+        keyboardBrightnessIncrease: "Zvýšiť jas klávesnice",
+        softwareDimming: "Stmaviť obraz",
+        extendedDimming: "Ďalšie stmievanie",
+        islandPromptTitle: "Zobrazovať jas v Dynamic Island?",
+        islandPromptMessage: "Dynamic Island zobrazuje zmeny jasu, len keď je v nastaveniach Displeje zapnuté „Ovládať displeje“.",
+        islandPromptKeepOff: "Nechať vypnuté"
+    )
+
+    static let de = BrightnessFeatureStrings(
+        pageTitle: "Displays",
+        hubDescription: "Helligkeit und Ein oder Aus für alle Displays",
+        enable: "Displays steuern",
+        enableCaption: "Regler für Helligkeit und Ein oder Aus für das eingebaute Display und externe Monitore, hier und im Menüleistenpanel.",
+        externalCaption: "Externe Monitore werden über dasselbe Protokoll wie ihre eigenen Tasten eingestellt. Trägt die Verbindung es nicht, etwa bei HDMI-Adaptern, dunkelt der Regler stattdessen das Bild ab, sodass die Helligkeit in jedem Fall steuerbar bleibt.",
+        noDisplays: "Kein Display gefunden.",
+        displayOff: "Aus",
+        turnOffDisplay: "Display ausschalten",
+        turnOnDisplay: "Display einschalten",
+        lastDisplayCaption: "Mindestens ein Display muss eingeschaltet bleiben.",
+        switchUnavailable: "Die Displaysteuerung ist auf diesem Mac nicht verfügbar.",
+        switchFailed: "Dieses Display konnte nicht geändert werden.",
+        openLidToEnable: "Öffne den Deckel, um das integrierte Display einzuschalten.",
+        keysToggle: "Helligkeitstasten folgen dem Zeiger",
+        keysCaption: "Die Helligkeitstasten der Tastatur ändern das Display, auf dem der Zeiger steht.",
+        keyStep: "Schritte der Helligkeitstasten",
+        keyStepCaption: "Kleinere Schritte bei jedem Druck auf die Helligkeitstasten und die Kurzbefehle für die Bildschirmhelligkeit.",
+        keyStepStandard: "Standard",
+        keyStepHalf: "Halbe Schritte",
+        keyStepQuarter: "Viertelschritte",
+        osdToggle: "Helligkeit beim Anpassen anzeigen",
+        osdCaption: "Zeigt den Helligkeitswert in Prozent bei Verwendung der Helligkeitstasten oder Regler.",
+        displayBrightnessShortcuts: "Kurzbefehle für die Bildschirmhelligkeit verwenden",
+        displayBrightnessShortcutCaption: "Kurzbefehle steuern den Hauptbildschirm oder bei aktivierter Zeigerverfolgung den Bildschirm unter dem Zeiger.",
+        displayBrightnessDecrease: "Bildschirmhelligkeit verringern",
+        displayBrightnessIncrease: "Bildschirmhelligkeit erhöhen",
+        keyboardLight: "Tastaturbeleuchtung",
+        keyboardLightCaption: "Schaltet die Tastaturbeleuchtung ein oder aus.",
+        keyboardBrightnessShortcuts: "Kurzbefehle für die Tastaturhelligkeit verwenden",
+        keyboardBrightnessDecrease: "Tastaturhelligkeit verringern",
+        keyboardBrightnessIncrease: "Tastaturhelligkeit erhöhen",
+        softwareDimming: "Bild abdunkeln",
+        extendedDimming: "Zusätzliches Abdunkeln",
+        islandPromptTitle: "Helligkeit in der Dynamic Island anzeigen?",
+        islandPromptMessage: "Die Dynamic Island zeigt Helligkeitsänderungen nur, wenn „Displays steuern“ in den Displays-Einstellungen aktiviert ist.",
+        islandPromptKeepOff: "Aus lassen"
+    )
+
+    static let fr = BrightnessFeatureStrings(
+        pageTitle: "Écrans",
+        hubDescription: "Luminosité et alimentation de tous les écrans",
+        enable: "Contrôler les écrans",
+        enableCaption: "Contrôles de luminosité et d’alimentation pour l’écran intégré et les moniteurs externes, ici et dans le panneau de la barre des menus.",
+        externalCaption: "Les moniteurs externes sont réglés par le même protocole que leurs propres boutons. Quand la connexion ne le transmet pas, comme avec les adaptateurs HDMI, le curseur assombrit l’image, le réglage fonctionne donc dans tous les cas.",
+        noDisplays: "Aucun écran détecté.",
+        displayOff: "Éteint",
+        turnOffDisplay: "Éteindre l’écran",
+        turnOnDisplay: "Allumer l’écran",
+        lastDisplayCaption: "Au moins un écran doit rester allumé.",
+        switchUnavailable: "Le contrôle d’alimentation des écrans n’est pas disponible sur ce Mac.",
+        switchFailed: "Impossible de modifier cet écran.",
+        openLidToEnable: "Ouvrez le couvercle pour allumer l’écran intégré.",
+        keysToggle: "Les touches de luminosité suivent le pointeur",
+        keysCaption: "Les touches de luminosité du clavier règlent l’écran où se trouve le pointeur.",
+        keyStep: "Pas des touches de luminosité",
+        keyStepCaption: "Des pas plus fins à chaque pression sur les touches de luminosité et les raccourcis de luminosité de l’écran.",
+        keyStepStandard: "Standard",
+        keyStepHalf: "Demi-pas",
+        keyStepQuarter: "Quart de pas",
+        osdToggle: "Afficher la luminosité pendant le réglage",
+        osdCaption: "Affiche le pourcentage de luminosité avec les touches ou les curseurs de luminosité.",
+        displayBrightnessShortcuts: "Utiliser les raccourcis de luminosité de l’écran",
+        displayBrightnessShortcutCaption: "Les raccourcis règlent l’écran principal ou celui sous le pointeur lorsque le suivi du pointeur est activé.",
+        displayBrightnessDecrease: "Réduire la luminosité de l’écran",
+        displayBrightnessIncrease: "Augmenter la luminosité de l’écran",
+        keyboardLight: "Éclairage du clavier",
+        keyboardLightCaption: "Allume ou éteint l’éclairage du clavier.",
+        keyboardBrightnessShortcuts: "Utiliser les raccourcis de luminosité du clavier",
+        keyboardBrightnessDecrease: "Réduire la luminosité du clavier",
+        keyboardBrightnessIncrease: "Augmenter la luminosité du clavier",
+        softwareDimming: "Assombrir l’image",
+        extendedDimming: "Assombrissement supplémentaire",
+        islandPromptTitle: "Afficher la luminosité dans la Dynamic Island ?",
+        islandPromptMessage: "La Dynamic Island n’affiche les changements de luminosité que lorsque « Contrôler les écrans » est activé dans les réglages Écrans.",
+        islandPromptKeepOff: "Laisser désactivé"
+    )
+
+    static let it = BrightnessFeatureStrings(
+        pageTitle: "Schermi",
+        hubDescription: "Luminosità e accensione per tutti gli schermi",
+        enable: "Controlla gli schermi",
+        enableCaption: "Controlli di luminosità e accensione per lo schermo integrato e i monitor esterni, qui e nel pannello della barra dei menu.",
+        externalCaption: "I monitor esterni vengono regolati con lo stesso protocollo dei loro pulsanti. Quando il collegamento non lo trasmette, come con gli adattatori HDMI, il cursore scurisce l’immagine, quindi la regolazione funziona comunque.",
+        noDisplays: "Nessuno schermo trovato.",
+        displayOff: "Spento",
+        turnOffDisplay: "Spegni schermo",
+        turnOnDisplay: "Accendi schermo",
+        lastDisplayCaption: "Almeno uno schermo deve rimanere acceso.",
+        switchUnavailable: "Il controllo di accensione degli schermi non è disponibile su questo Mac.",
+        switchFailed: "Non è stato possibile modificare questo schermo.",
+        openLidToEnable: "Apri il coperchio per accendere lo schermo integrato.",
+        keysToggle: "I tasti di luminosità seguono il puntatore",
+        keysCaption: "I tasti di luminosità della tastiera regolano lo schermo dove si trova il puntatore.",
+        keyStep: "Passi dei tasti di luminosità",
+        keyStepCaption: "Passi più piccoli a ogni pressione dei tasti di luminosità e delle scorciatoie per la luminosità dello schermo.",
+        keyStepStandard: "Standard",
+        keyStepHalf: "Mezzo passo",
+        keyStepQuarter: "Un quarto di passo",
+        osdToggle: "Mostra la luminosità durante la regolazione",
+        osdCaption: "Mostra la percentuale di luminosità quando usi i tasti o i cursori della luminosità.",
+        displayBrightnessShortcuts: "Usa le scorciatoie per la luminosità dello schermo",
+        displayBrightnessShortcutCaption: "Le scorciatoie regolano lo schermo principale o quello sotto il puntatore quando è attiva la relativa opzione.",
+        displayBrightnessDecrease: "Riduci luminosità schermo",
+        displayBrightnessIncrease: "Aumenta luminosità schermo",
+        keyboardLight: "Illuminazione tastiera",
+        keyboardLightCaption: "Accende o spegne l’illuminazione della tastiera.",
+        keyboardBrightnessShortcuts: "Usa le scorciatoie per la luminosità della tastiera",
+        keyboardBrightnessDecrease: "Riduci luminosità tastiera",
+        keyboardBrightnessIncrease: "Aumenta luminosità tastiera",
+        softwareDimming: "Scurisci l’immagine",
+        extendedDimming: "Oscuramento extra",
+        islandPromptTitle: "Mostrare la luminosità nella Dynamic Island?",
+        islandPromptMessage: "La Dynamic Island mostra le variazioni di luminosità solo quando “Controlla gli schermi” è attivo nelle impostazioni Schermi.",
+        islandPromptKeepOff: "Lascia disattivato"
+    )
+
+    static let ja = BrightnessFeatureStrings(
+        pageTitle: "ディスプレイ",
+        hubDescription: "すべてのディスプレイの明るさと電源を操作",
+        enable: "ディスプレイを操作",
+        enableCaption: "内蔵ディスプレイと外部モニタの明るさと電源を、こことメニューバーパネルで操作します。",
+        externalCaption: "外部モニタは本体のボタンと同じプロトコルで調整します。HDMI変換アダプタなどでこのプロトコルが通らない場合は、スライダが代わりに画面を暗くするため、どの接続でも輝度を調整できます。",
+        noDisplays: "ディスプレイが見つかりません。",
+        displayOff: "オフ",
+        turnOffDisplay: "ディスプレイの電源を切る",
+        turnOnDisplay: "ディスプレイの電源を入れる",
+        lastDisplayCaption: "少なくとも1台のディスプレイをオンのままにしてください。",
+        switchUnavailable: "このMacではディスプレイの切り替えを利用できません。",
+        switchFailed: "このディスプレイを切り替えられませんでした。",
+        openLidToEnable: "内蔵ディスプレイをオンにするには、蓋を開いてください。",
+        keysToggle: "輝度キーはポインタに従う",
+        keysCaption: "キーボードの輝度キーが、ポインタのあるディスプレイを調整します。",
+        keyStep: "輝度キーの調整幅",
+        keyStepCaption: "輝度キーとディスプレイの明るさのショートカットを押すたびに、より細かく調整します。",
+        keyStepStandard: "標準",
+        keyStepHalf: "半分",
+        keyStepQuarter: "4分の1",
+        osdToggle: "明るさの調整時に表示",
+        osdCaption: "輝度キーまたはスライダを使うと、明るさをパーセントで表示します。",
+        displayBrightnessShortcuts: "ディスプレイの明るさのショートカットを使用",
+        displayBrightnessShortcutCaption: "ショートカットでメインディスプレイを調整します。ポインタ追従がオンの場合は、ポインタのあるディスプレイを調整します。",
+        displayBrightnessDecrease: "ディスプレイの明るさを下げる",
+        displayBrightnessIncrease: "ディスプレイの明るさを上げる",
+        keyboardLight: "キーボードのバックライト",
+        keyboardLightCaption: "キーボードのバックライトをオンまたはオフにします。",
+        keyboardBrightnessShortcuts: "キーボードの明るさのショートカットを使用",
+        keyboardBrightnessDecrease: "キーボードの明るさを下げる",
+        keyboardBrightnessIncrease: "キーボードの明るさを上げる",
+        softwareDimming: "画面を暗くする",
+        extendedDimming: "さらに暗くする",
+        islandPromptTitle: "Dynamic Islandに明るさを表示しますか？",
+        islandPromptMessage: "Dynamic Islandは、「ディスプレイ」設定で「ディスプレイを操作」がオンのときだけ明るさの変化を表示します。",
+        islandPromptKeepOff: "オフのままにする"
+    )
+
+    static let ko = BrightnessFeatureStrings(
+        pageTitle: "디스플레이",
+        hubDescription: "모든 디스플레이의 밝기와 전원 제어",
+        enable: "디스플레이 제어",
+        enableCaption: "내장 화면과 외부 모니터의 밝기와 전원을 여기와 메뉴 막대 패널에서 제어합니다.",
+        externalCaption: "외부 모니터는 자체 버튼과 동일한 프로토콜로 조절됩니다. HDMI 어댑터처럼 연결이 이 프로토콜을 지원하지 않으면 슬라이더가 대신 화면을 어둡게 하므로 어느 경우든 밝기를 조절할 수 있습니다.",
+        noDisplays: "디스플레이를 찾을 수 없습니다.",
+        displayOff: "꺼짐",
+        turnOffDisplay: "디스플레이 끄기",
+        turnOnDisplay: "디스플레이 켜기",
+        lastDisplayCaption: "최소 한 대의 디스플레이는 켜져 있어야 합니다.",
+        switchUnavailable: "이 Mac에서는 디스플레이 전원 제어를 사용할 수 없습니다.",
+        switchFailed: "이 디스플레이를 변경할 수 없습니다.",
+        openLidToEnable: "내장 디스플레이를 켜려면 덮개를 여세요.",
+        keysToggle: "밝기 키가 포인터를 따라감",
+        keysCaption: "키보드의 밝기 키로 포인터가 있는 디스플레이를 조절합니다.",
+        keyStep: "밝기 키 단계",
+        keyStepCaption: "밝기 키와 디스플레이 밝기 단축키를 누를 때마다 더 작은 단계로 조절합니다.",
+        keyStepStandard: "표준",
+        keyStepHalf: "1/2 단계",
+        keyStepQuarter: "1/4 단계",
+        osdToggle: "밝기 조절 시 표시",
+        osdCaption: "밝기 키나 슬라이더를 사용할 때 밝기를 백분율로 표시합니다.",
+        displayBrightnessShortcuts: "디스플레이 밝기 단축키 사용",
+        displayBrightnessShortcutCaption: "단축키로 주 디스플레이를 조절합니다. 포인터 따라가기가 켜져 있으면 포인터가 있는 디스플레이를 조절합니다.",
+        displayBrightnessDecrease: "디스플레이 밝기 낮추기",
+        displayBrightnessIncrease: "디스플레이 밝기 높이기",
+        keyboardLight: "키보드 백라이트",
+        keyboardLightCaption: "키보드 백라이트를 켜거나 끕니다.",
+        keyboardBrightnessShortcuts: "키보드 밝기 단축키 사용",
+        keyboardBrightnessDecrease: "키보드 밝기 낮추기",
+        keyboardBrightnessIncrease: "키보드 밝기 높이기",
+        softwareDimming: "화면을 어둡게",
+        extendedDimming: "추가 어둡게",
+        islandPromptTitle: "Dynamic Island에 밝기를 표시할까요?",
+        islandPromptMessage: "Dynamic Island는 디스플레이 설정에서 “디스플레이 제어”가 켜져 있을 때만 밝기 변화를 표시합니다.",
+        islandPromptKeepOff: "끈 상태로 유지"
+    )
+
+    static let zhHans = BrightnessFeatureStrings(
+        pageTitle: "显示器",
+        hubDescription: "控制所有显示器的亮度和开关",
+        enable: "控制显示器",
+        enableCaption: "内建显示器和外接显示器的亮度与开关控制，显示在这里和菜单栏面板中。",
+        externalCaption: "外接显示器通过与其自身按键相同的协议调节。当连接无法传输该协议时（例如 HDMI 转接器），滑块会改为调暗画面，因此亮度调节始终可用。",
+        noDisplays: "未找到显示器。",
+        displayOff: "已关闭",
+        turnOffDisplay: "关闭显示器",
+        turnOnDisplay: "打开显示器",
+        lastDisplayCaption: "至少要保留一台显示器开启。",
+        switchUnavailable: "此 Mac 不支持显示器开关。",
+        switchFailed: "无法更改这台显示器。",
+        openLidToEnable: "请打开 Mac 盖子后再启用内建显示器。",
+        keysToggle: "亮度键跟随指针",
+        keysCaption: "键盘上的亮度键调节指针所在的显示器。",
+        keyStep: "亮度键步长",
+        keyStepCaption: "每次按下亮度键或显示器亮度快捷键时，以更小的步长调节。",
+        keyStepStandard: "标准",
+        keyStepHalf: "半步",
+        keyStepQuarter: "四分之一步",
+        osdToggle: "调节亮度时显示百分比",
+        osdCaption: "使用亮度键或滑块时显示亮度百分比。",
+        displayBrightnessShortcuts: "使用显示器亮度快捷键",
+        displayBrightnessShortcutCaption: "快捷键调整主显示器；开启跟随指针后，则调整指针所在的显示器。",
+        displayBrightnessDecrease: "降低显示器亮度",
+        displayBrightnessIncrease: "提高显示器亮度",
+        keyboardLight: "键盘背光",
+        keyboardLightCaption: "打开或关闭键盘背光。",
+        keyboardBrightnessShortcuts: "使用键盘亮度快捷键",
+        keyboardBrightnessDecrease: "降低键盘亮度",
+        keyboardBrightnessIncrease: "提高键盘亮度",
+        softwareDimming: "调暗画面",
+        extendedDimming: "进一步调暗",
+        islandPromptTitle: "在Dynamic Island中显示亮度？",
+        islandPromptMessage: "只有在“显示器”设置中打开“控制显示器”时，Dynamic Island才会显示亮度变化。",
+        islandPromptKeepOff: "保持关闭"
+    )
+
+    static let zhTW = BrightnessFeatureStrings(
+        pageTitle: "顯示器",
+        hubDescription: "控制所有顯示器的亮度和開關",
+        enable: "控制顯示器",
+        enableCaption: "內建螢幕和外接顯示器的亮度與開關控制，顯示在這裡和選單列面板中。",
+        externalCaption: "外接顯示器透過與其本身按鍵相同的協定調整。當連接無法傳輸該協定時（例如 HDMI 轉接器），滑桿會改為調暗畫面，因此亮度調整始終可用。",
+        noDisplays: "找不到顯示器。",
+        displayOff: "已關閉",
+        turnOffDisplay: "關閉顯示器",
+        turnOnDisplay: "開啟顯示器",
+        lastDisplayCaption: "至少要保留一台顯示器開啟。",
+        switchUnavailable: "此 Mac 不支援顯示器開關。",
+        switchFailed: "無法更改這台顯示器。",
+        openLidToEnable: "請打開 Mac 上蓋後再啟用內建螢幕。",
+        keysToggle: "亮度鍵跟隨指標",
+        keysCaption: "鍵盤上的亮度鍵調整指標所在的顯示器。",
+        keyStep: "亮度鍵步幅",
+        keyStepCaption: "每次按下亮度鍵或顯示器亮度快捷鍵時，以更小的步幅調整。",
+        keyStepStandard: "標準",
+        keyStepHalf: "半步",
+        keyStepQuarter: "四分之一步",
+        osdToggle: "調整亮度時顯示百分比",
+        osdCaption: "使用亮度鍵或滑桿時顯示亮度百分比。",
+        displayBrightnessShortcuts: "使用顯示器亮度快捷鍵",
+        displayBrightnessShortcutCaption: "快捷鍵調整主顯示器；開啟跟隨指標後，則調整指標所在的顯示器。",
+        displayBrightnessDecrease: "降低顯示器亮度",
+        displayBrightnessIncrease: "提高顯示器亮度",
+        keyboardLight: "鍵盤背光",
+        keyboardLightCaption: "開啟或關閉鍵盤背光。",
+        keyboardBrightnessShortcuts: "使用鍵盤亮度快捷鍵",
+        keyboardBrightnessDecrease: "降低鍵盤亮度",
+        keyboardBrightnessIncrease: "提高鍵盤亮度",
+        softwareDimming: "調暗畫面",
+        extendedDimming: "進一步調暗",
+        islandPromptTitle: "要在Dynamic Island中顯示亮度嗎？",
+        islandPromptMessage: "只有在「顯示器」設定中開啟「控制顯示器」時，Dynamic Island才會顯示亮度變化。",
+        islandPromptKeepOff: "保持關閉"
+    )
+
+    static let zhHK = BrightnessFeatureStrings(
+        pageTitle: "顯示器",
+        hubDescription: "控制所有顯示器的亮度和開關",
+        enable: "控制顯示器",
+        enableCaption: "內置螢幕和外接顯示器的亮度與開關控制，顯示在這裏和選單列面板中。",
+        externalCaption: "外接顯示器透過與其本身按鍵相同的協定調整。當連接無法傳輸該協定時（例如 HDMI 轉接器），滑桿會改為調暗畫面，因此亮度調整始終可用。",
+        noDisplays: "找不到顯示器。",
+        displayOff: "已關閉",
+        turnOffDisplay: "關閉顯示器",
+        turnOnDisplay: "開啟顯示器",
+        lastDisplayCaption: "至少要保留一台顯示器開啟。",
+        switchUnavailable: "此 Mac 不支援顯示器開關。",
+        switchFailed: "無法更改這部顯示器。",
+        openLidToEnable: "請打開 Mac 上蓋後再啟用內置顯示器。",
+        keysToggle: "亮度鍵跟隨指標",
+        keysCaption: "鍵盤上的亮度鍵調整指標所在的顯示器。",
+        keyStep: "亮度鍵步幅",
+        keyStepCaption: "每次按下亮度鍵或顯示器亮度快捷鍵時，以更小的步幅調整。",
+        keyStepStandard: "標準",
+        keyStepHalf: "半步",
+        keyStepQuarter: "四分之一步",
+        osdToggle: "調整亮度時顯示百分比",
+        osdCaption: "使用亮度鍵或滑桿時顯示亮度百分比。",
+        displayBrightnessShortcuts: "使用顯示器亮度快捷鍵",
+        displayBrightnessShortcutCaption: "快捷鍵調整主顯示器；開啟跟隨游標後，則調整游標所在的顯示器。",
+        displayBrightnessDecrease: "降低顯示器亮度",
+        displayBrightnessIncrease: "提高顯示器亮度",
+        keyboardLight: "鍵盤背光",
+        keyboardLightCaption: "開啟或關閉鍵盤背光。",
+        keyboardBrightnessShortcuts: "使用鍵盤亮度快捷鍵",
+        keyboardBrightnessDecrease: "降低鍵盤亮度",
+        keyboardBrightnessIncrease: "提高鍵盤亮度",
+        softwareDimming: "調暗畫面",
+        extendedDimming: "進一步調暗",
+        islandPromptTitle: "要在Dynamic Island中顯示亮度嗎？",
+        islandPromptMessage: "只有在「顯示器」設定中開啟「控制顯示器」時，Dynamic Island才會顯示亮度變化。",
+        islandPromptKeepOff: "保持關閉"
+    )
+    static let uk = BrightnessFeatureStrings(
+        pageTitle: "Дисплеї",
+        hubDescription: "Керування яскравістю та живленням для кожного дисплея",
+        enable: "Керування дисплеями",
+        enableCaption: "Керування яскравістю та вмиканням/вимиканням вбудованого екрана та зовнішніх моніторів тут та в панелі на смузі меню.",
+        externalCaption: "Зовнішні монітори регулюються тим самим протоколом, що й їхні власні кнопки. Коли з’єднання не може його передати, як з HDMI-адаптерами, повзунок замість цього затемнює зображення, тож керування яскравістю працює в обох випадках.",
+        noDisplays: "Дисплей не знайдено.",
+        displayOff: "Вимкнено",
+        turnOffDisplay: "Вимкнути дисплей",
+        turnOnDisplay: "Увімкнути дисплей",
+        lastDisplayCaption: "Принаймні один дисплей має залишатися ввімкненим.",
+        switchUnavailable: "Перемикання дисплеїв недоступне на цьому Mac.",
+        switchFailed: "Не вдалося змінити цей дисплей.",
+        openLidToEnable: "Відкрийте кришку, щоб увімкнути вбудований дисплей.",
+        keysToggle: "Клавіші яскравості слідують за вказівником",
+        keysCaption: "Клавіші яскравості клавіатури змінюють дисплей під вказівником.",
+        keyStep: "Крок клавіш яскравості",
+        keyStepCaption: "Менші кроки з кожним натисканням клавіш яскравості та клавіатурних скорочень яскравості дисплея.",
+        keyStepStandard: "Стандартний",
+        keyStepHalf: "Половина кроку",
+        keyStepQuarter: "Чверть кроку",
+        osdToggle: "Показувати яскравість під час регулювання",
+        osdCaption: "Показує відсоток яскравості при використанні клавіш або повзунків яскравості.",
+        displayBrightnessShortcuts: "Клавіатурні скорочення яскравості дисплея",
+        displayBrightnessShortcutCaption: "Скорочення змінюють основний дисплей; коли ввімкнено слідкування за вказівником, змінюється дисплей під вказівником.",
+        displayBrightnessDecrease: "Зменшити яскравість дисплея",
+        displayBrightnessIncrease: "Збільшити яскравість дисплея",
+        keyboardLight: "Підсвічування клавіатури",
+        keyboardLightCaption: "Вмикає або вимикає підсвічування клавіатури.",
+        keyboardBrightnessShortcuts: "Клавіатурні скорочення яскравості клавіатури",
+        keyboardBrightnessDecrease: "Зменшити яскравість клавіатури",
+        keyboardBrightnessIncrease: "Збільшити яскравість клавіатури",
+        softwareDimming: "Затемнити зображення",
+        extendedDimming: "Додаткове затемнення",
+        islandPromptTitle: "Показувати яскравість у Dynamic Island?",
+        islandPromptMessage: "Dynamic Island показує зміни яскравості, лише коли в налаштуваннях «Дисплеї» увімкнено «Керування дисплеями».",
+        islandPromptKeepOff: "Залишити вимкненим"
+    )
+}

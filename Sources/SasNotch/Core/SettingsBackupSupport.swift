@@ -1,0 +1,506 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Vorssaint
+// Modified for SasNotch by SasNotch contributors, 2026
+
+import Foundation
+
+/// The portable part of the app's settings: what a backup file carries and
+/// how an incoming file is validated. Pure logic so the harness can pin down
+/// exactly which keys travel (and, more importantly, which never do).
+enum SettingsBackupSupport {
+    static let formatVersionKey = "sasnotchBackupVersion"
+    static let appVersionKey = "sasnotchBackupAppVersion"
+    static let settingsKey = "settings"
+    static let formatVersion = 1
+
+    /// Keys the backup carries: every registered preference, the availability
+    /// layer, and the deliberately unregistered selection/layout keys — minus
+    /// state that belongs to one machine or one moment.
+    static func exportKeys() -> Set<String> {
+        var keys = Set(Defaults.registeredDefaults.keys)
+        keys.formUnion(AppFeature.availabilityDefaults.keys)
+        keys.formUnion(unregisteredPreferenceKeys)
+        keys.subtract(machineStateKeys)
+        return keys
+    }
+
+    /// Backups written before Dynamic Island existed have no island keys.
+    /// Importing one must not erase the receiving Mac's island preferences.
+    static func omitsDynamicIslandSettings(_ settings: [String: Any]) -> Bool {
+        dynamicIslandKeys(in: exportKeys()).isDisjoint(with: settings.keys)
+    }
+
+    static func keysToClear(whenImporting settings: [String: Any]) -> Set<String> {
+        let keys = exportKeys()
+        guard omitsDynamicIslandSettings(settings) else { return keys }
+        return keys.subtracting(dynamicIslandKeys(in: keys))
+    }
+
+    private static func dynamicIslandKeys(in keys: Set<String>) -> Set<String> {
+        let availability = Set(AppFeature.features(in: .dynamicIsland).map(\.availabilityKey))
+        return keys.filter {
+            $0.hasPrefix("notch") || $0 == DefaultsKey.panelControlNotch
+                || availability.contains($0)
+        }
+    }
+
+    /// Preferences stored without a registered default (absence means "use
+    /// the built-in behavior"), still part of how the user set the app up.
+    static let unregisteredPreferenceKeys: Set<String> = [
+        DefaultsKey.autoQuitEnabled,
+        DefaultsKey.shelfEnabled,
+        DefaultsKey.finderCutPasteEnabled,
+        DefaultsKey.textSnippets,
+        DefaultsKey.radialMenuItems,
+        DefaultsKey.radialMenuProfiles,
+        DefaultsKey.commandBarLinks,
+        DefaultsKey.commandBarRowShortcuts,
+        DefaultsKey.language,
+        DefaultsKey.appVolumes,
+        DefaultsKey.appVolumesArePositions,
+        DefaultsKey.appOutputDevices,
+        DefaultsKey.mixerCallAppVolumeEnabled,
+        DefaultsKey.mixerHiddenApps,
+        DefaultsKey.preferredInputDevice,
+        DefaultsKey.soundOutputSwitcherDeviceUIDs,
+        DefaultsKey.menuBarCPU,
+        DefaultsKey.menuBarGPU,
+        DefaultsKey.menuBarMemory,
+        DefaultsKey.menuBarNetwork,
+        DefaultsKey.menuBarBattery,
+        DefaultsKey.menuBarPower,
+        DefaultsKey.panelSectionOrder,
+        DefaultsKey.panelUtilityOrder,
+        DefaultsKey.panelControlOrder,
+        DefaultsKey.panelToggleOrder,
+        DefaultsKey.panelSystemOrder,
+        DefaultsKey.panelNetworkOrder,
+        DefaultsKey.panelDiskOrder,
+        DefaultsKey.panelPowerOrder,
+        DefaultsKey.panelCollapsedSections,
+        DefaultsKey.quickLauncherItemOrder,
+        // Legacy island layouts stay restorable; absence selects the new layout.
+        DefaultsKey.notchQuickAccessSide,
+        DefaultsKey.notchQuickAccessSecond,
+        DefaultsKey.notchQuickAccessThird,
+        DefaultsKey.systemShortcutTakeOverKeys,
+        // Experience flags: a restored Mac must not replay onboarding or the
+        // feature intros the user has already been through.
+        DefaultsKey.hasOnboarded,
+        DefaultsKey.onboardingStep,
+        DefaultsKey.featuresOnboardingVersion,
+        DefaultsKey.lastUpdateIntroVersion,
+        DefaultsKey.supportUpdateIntroVersion,
+        DefaultsKey.updateHighlightsSeenVersion,
+        DefaultsKey.featureHubKeptFeatures,
+        DefaultsKey.brightnessUpdatePromptState,
+        DefaultsKey.panelCollapsedResetVersion,
+    ]
+
+    /// Never exported: live state, per-machine placement, private content and
+    /// anything an update flow owns. Clipboard entries and shelf items stay
+    /// out by construction (they are not preference keys), listed here only
+    /// when they would otherwise slip in through the registered set.
+    static let machineStateKeys: Set<String> = [
+        DefaultsKey.displaysSwitchedOff,
+        DefaultsKey.displaysSwitchedOffFingerprints,
+        // Codex homes are folders on this Mac whose sign-in the cards use,
+        // never settings to bring to another one.
+        DefaultsKey.notchAgentsCodexProfiles,
+        DefaultsKey.dockPreviewRestoreAutohide,
+        // The Space arrangement setting to put back, and a Dock restart still
+        // owed, belong to this Mac's Dock.
+        DefaultsKey.spacesOrderRestore,
+        DefaultsKey.spacesOrderRestartPending,
+        // A Bluetooth restore owed by one sleeping Mac means nothing on another.
+        DefaultsKey.bluetoothSleepRestorePending,
+        DefaultsKey.micMuteActive,
+        DefaultsKey.micMuteSavedVolume,
+        // Levels and device ids belong to the microphones of one Mac.
+        DefaultsKey.micMuteSavedVolumes,
+        DefaultsKey.micMuteSavedChannelVolumes,
+        DefaultsKey.micMuteMutedDevices,
+        DefaultsKey.cleanerLastAutoRun,
+        // When the last check ran and what it found belong to one Mac.
+        DefaultsKey.appUpdatesLastCheck,
+        DefaultsKey.appUpdatesLastCount,
+        DefaultsKey.appUpdatesNotifiedIDs,
+        DefaultsKey.cleanerLastAutoFreed,
+        DefaultsKey.cleanerLastAutoFailed,
+        DefaultsKey.whatsAppDownloadsAutomaticStartDate,
+        DefaultsKey.whatsAppDownloadsLastAutoRun,
+        DefaultsKey.whatsAppDownloadsLastCleanup,
+        DefaultsKey.whatsAppDownloadsLastCleanupCount,
+        DefaultsKey.whatsAppDownloadsLastCleanupBytes,
+        DefaultsKey.whatsAppDownloadsLastCleanupFailed,
+        DefaultsKey.whatsAppDownloadsLastCleanupAutomatic,
+        DefaultsKey.whatsAppDownloadsExclusions,
+        DefaultsKey.whatsAppDownloadsAccessConfirmed,
+        DefaultsKey.whatsAppOrganizerDestinationPath,
+        DefaultsKey.whatsAppOrganizerRecords,
+        DefaultsKey.whatsAppOrganizerUndoTransaction,
+        DefaultsKey.whatsAppOrganizerLastRun,
+        DefaultsKey.whatsAppOrganizerLastMoved,
+        DefaultsKey.whatsAppOrganizerLastDuplicates,
+        DefaultsKey.whatsAppOrganizerLastFailed,
+        // What one person runs most is habit, not configuration.
+        DefaultsKey.commandBarUsage,
+        DefaultsKey.commandBarQueryHabits,
+        DefaultsKey.commandBarQueryHabitKey,
+        // A chosen folder is authority on one Mac, not portable configuration.
+        // Restoring it elsewhere could search a different volume or trigger a
+        // protected-folder prompt without a fresh choice.
+        DefaultsKey.commandBarFileScopes,
+        DefaultsKey.notchDownloadsFolderBookmark,
+        DefaultsKey.wallpaperOwnBookmarks,
+        DefaultsKey.wallpaperExcludedOwnPaths,
+        DefaultsKey.recorderSaveFolder,
+        DefaultsKey.screenshotSaveFolder,
+        DefaultsKey.musicBlockReplacementPath,
+        // A local watermark file is authority on this Mac, not portable data.
+        DefaultsKey.mediaImageWatermarkLogoPath,
+        DefaultsKey.simulateUpdate,
+        DefaultsKey.updateShowcaseIntroVersion,
+        DefaultsKey.updateShowcaseMediaOverride,
+        DefaultsKey.unifiedScreenCaptureShortcutMigrated,
+        DefaultsKey.restoredScreenCaptureShortcutsMigrated,
+        DefaultsKey.orphanedCaptureShortcutMigrated,
+        DefaultsKey.notchAgentsOptInMigrated,
+        DefaultsKey.settingsWindowWidth,
+        DefaultsKey.settingsWindowHeight,
+        DefaultsKey.clipboardHistoryWindowWidth,
+        DefaultsKey.clipboardHistoryWindowHeight,
+        // The last magnifier level is session history; its remembered/default
+        // policy remains portable, but another Mac need not inherit the value.
+        DefaultsKey.screenshotLoupeLastZoom,
+        DefaultsKey.screenshotSharingDeveloperEndpoint,
+        // Whether the audio system let a recording hear the Mac's sound is a
+        // grant this Mac gave, not a setting.
+        DefaultsKey.recorderSystemAudioTapVerified,
+        DefaultsKey.fanControlRecoveryNeeded,
+        DefaultsKey.fanControlHelperVersion,
+        // Control left running on one Mac must not start fans on another.
+        DefaultsKey.fanControlResumeConfiguration,
+        DefaultsKey.switcherNativeHotkeysSuppressed,
+        DefaultsKey.systemShortcutsSuppressed,
+        // DDC capability belongs to one physical monitor on one Mac port.
+        DefaultsKey.brightnessDDCWriteOnlyPaths,
+        // Restoring it would skip the one-time recheck of the cache above on
+        // a Mac that still holds its own stale verdicts.
+        DefaultsKey.brightnessDDCWriteOnlyPathsRechecked,
+        DefaultsKey.brightnessForcedSoftwarePaths,
+        DefaultsKey.brightnessExtendedDimmingPaths,
+        // A fit measured against one Mac's camera housing would misfit another's.
+        DefaultsKey.notchCameraFitWidth,
+        DefaultsKey.notchCameraFitHeight,
+    ]
+
+    /// The file's content: an envelope with the format version, the app
+    /// version that wrote it, and the filtered settings.
+    static func payload(appVersion: String,
+                        valueFor: (String) -> Any?) -> [String: Any] {
+        var settings: [String: Any] = [:]
+        for key in exportKeys() {
+            if let value = valueFor(key) {
+                settings[key] = value
+            }
+        }
+        settings = portableNotchDisplay(settings)
+        settings = portableMediaSettings(settings)
+        settings = portableMouseExceptions(settings)
+        settings = portableWindowLayoutIgnoredApps(settings)
+        settings = portableThumbnailPauseLists(settings)
+        settings = exportedAppVolumes(settings)
+        return [
+            formatVersionKey: formatVersion,
+            appVersionKey: appVersion,
+            settingsKey: settings,
+        ]
+    }
+
+    /// Validates an incoming file and returns only the keys this build knows
+    /// and exports — unknown, renamed or never-exported keys are dropped, so
+    /// a tampered or future file can never write outside the allowed set.
+    static func sanitizedSettings(from payload: [String: Any]) -> [String: Any]? {
+        guard let version = formatVersion(from: payload),
+              version >= 1, version <= formatVersion,
+              let settings = payload[settingsKey] as? [String: Any]
+        else { return nil }
+        let allowed = exportKeys()
+        let filtered = settings.filter { allowed.contains($0.key) && valueLooksRight($0.key, $0.value) }
+        return portableNotchDisplay(portableThumbnailPauseLists(portableWindowLayoutIgnoredApps(
+            portableMouseExceptions(portableMediaSettings(filtered)))))
+    }
+
+    /// 3.4.1 and earlier play a saved app volume as the gain itself. A backup
+    /// keeps that format, so an older version restores the same loudness, and
+    /// leaves the marker out, so the relaunch after an import here converts
+    /// the levels back to slider positions.
+    private static func exportedAppVolumes(_ settings: [String: Any]) -> [String: Any] {
+        guard settings[DefaultsKey.appVolumesArePositions] as? Bool == true,
+              let positions = settings[DefaultsKey.appVolumes] as? [String: Any] else { return settings }
+        var result = settings
+        result[DefaultsKey.appVolumes] = positions.compactMapValues { value -> Double? in
+            guard let position = (value as? NSNumber)?.doubleValue, position.isFinite else { return nil }
+            return Double(MixerRoutingSupport.gain(forVolume: position))
+        }
+        result.removeValue(forKey: DefaultsKey.appVolumesArePositions)
+        return result
+    }
+
+    /// A display mode this version does not offer, such as one kept by an
+    /// earlier development build, restores as the automatic choice.
+    private static func portableNotchDisplay(_ settings: [String: Any]) -> [String: Any] {
+        var result = settings
+        if let mode = result[DefaultsKey.notchDisplay] as? String, NotchDisplay(rawValue: mode) == nil {
+            result[DefaultsKey.notchDisplay] = NotchDisplay.automatic.rawValue
+        }
+        return result
+    }
+
+    static func formatVersion(from payload: [String: Any]) -> Int? {
+        if let intValue = payload[formatVersionKey] as? Int {
+            return intValue
+        }
+        if let number = payload[formatVersionKey] as? NSNumber {
+            return number.intValue
+        }
+        if let string = payload[formatVersionKey] as? String,
+           let intValue = Int(string.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return intValue
+        }
+        return nil
+    }
+
+    /// The half of an exception list a backup file never carries, because
+    /// `portableMouseExceptions` filters it out on the way out.
+    static func pathIdentities(in list: [String]) -> [String] {
+        list.filter(MouseAppExceptionSupport.isExecutablePathIdentity)
+    }
+
+    /// What an exception list should hold once a backup has been applied.
+    /// Restoring clears every exported key before writing the file's values,
+    /// and the file only has the portable half -- so without carrying the
+    /// paths across, applying a backup would delete the entries for programs
+    /// that are not apps, including on the Mac the backup was written on. The
+    /// restored order wins and a carried path already present is not doubled,
+    /// so applying the same backup twice lands on the same list. All five keys
+    /// register `[String]()`, so after the clear the read is `[]` rather than
+    /// the pre-restore list -- which is what makes this safe on a backup
+    /// written before these keys existed, and not only on one that carries an
+    /// empty array. (Reasoning from @PathGao's review.)
+    static func restoredExceptionList(restored: [String], carried: [String]) -> [String] {
+        restored + carried.filter { !restored.contains($0) }
+    }
+
+    /// A mouse exception list holds two kinds of identity at once: a bundle
+    /// identifier, which names the same app on any Mac, and the resolved path
+    /// of a program that has no identifier to be named by (issue #1009). The
+    /// never-exported list above already refuses the second kind wherever it
+    /// has a key to itself -- `commandBarFileScopes`,
+    /// `mediaImageWatermarkLogoPath`, `brightnessDDCWriteOnlyPaths`, all for
+    /// the same stated reason: authority on one Mac, not portable
+    /// configuration. Here the two kinds share one array, so the refusal has
+    /// to be per value rather than per key. Left in, a backup would carry the
+    /// short username inside the path, and restoring it on another Mac would
+    /// leave a row pointing at a file that is not there -- which
+    /// `valueLooksRight` cannot catch, since the value is a perfectly good
+    /// `[String]`.
+    ///
+    /// Driven from `MouseExceptionScope.allCases` rather than a list of keys
+    /// spelled here, so a scope that renames its key, or two scopes that come
+    /// to share one, are covered without this file being edited.
+    private static func portableMouseExceptions(_ source: [String: Any]) -> [String: Any] {
+        var settings = source
+        for key in Set(MouseExceptionScope.allCases.map(\.defaultsKey)) {
+            guard let stored = settings[key] as? [String] else { continue }
+            let portable = stored.filter { !MouseAppExceptionSupport.isExecutablePathIdentity($0) }
+            guard portable.count != stored.count else { continue }
+            // An emptied list still means "no exceptions", so the key stays
+            // rather than falling back to whatever a missing key would do.
+            settings[key] = portable
+        }
+        return settings
+    }
+
+    private static func portableWindowLayoutIgnoredApps(_ source: [String: Any]) -> [String: Any] {
+        var settings = source
+        if let apps = settings[DefaultsKey.windowLayoutIgnoredApps] as? [String] {
+            // Executable paths belong to this Mac; only bundle IDs travel in backups.
+            settings[DefaultsKey.windowLayoutIgnoredApps] = apps.filter {
+                !MouseAppExceptionSupport.isExecutablePathIdentity($0)
+            }
+        }
+        return settings
+    }
+
+    /// The lists of apps where Dock Preview and the switcher stop capturing
+    /// thumbnails. They take a program that is not an app by its path, too
+    /// (issue #3033).
+    static let thumbnailPauseListKeys = [DefaultsKey.windowPreviewExcludedApps,
+                                         DefaultsKey.switcherPreviewExcludedApps]
+
+    private static func portableThumbnailPauseLists(_ source: [String: Any]) -> [String: Any] {
+        var settings = source
+        for key in thumbnailPauseListKeys {
+            guard let apps = settings[key] as? [String] else { continue }
+            settings[key] = apps.filter { !MouseAppExceptionSupport.isExecutablePathIdentity($0) }
+        }
+        return settings
+    }
+
+    /// The switcher's paused apps for a backup written before the switcher
+    /// kept its own list, which carries only Dock Preview's. The launch
+    /// migration copies that list only while the switcher's key is unset, and
+    /// putting this Mac's paths back sets it first, so a restore copies it.
+    /// Nil when the backup has the switcher's own list.
+    static func sharedSwitcherPauseList(in settings: [String: Any]) -> [String]? {
+        guard settings[DefaultsKey.switcherPreviewExcludedApps] == nil else { return nil }
+        return settings[DefaultsKey.windowPreviewExcludedApps] as? [String]
+    }
+
+    private static func portableMediaSettings(_ source: [String: Any]) -> [String: Any] {
+        var settings = source
+        if let raw = settings[DefaultsKey.screenshotWatermarkStyle] as? String {
+            var style = raw.data(using: .utf8).flatMap {
+                try? JSONDecoder().decode(ScreenshotSupport.WatermarkStyle.self, from: $0)
+            } ?? ScreenshotSupport.WatermarkStyle()
+            style.imagePath = nil
+            settings[DefaultsKey.screenshotWatermarkStyle] = style.encoded()
+        }
+        if let raw = settings[DefaultsKey.screenshotWatermarkPresets] as? String {
+            let portable = ScreenshotSupport.decodedWatermarkPresets(raw)
+                .filter { $0.kind != .image }
+                .map { style in
+                    var style = style
+                    style.imagePath = nil
+                    return style
+                }
+            settings[DefaultsKey.screenshotWatermarkPresets] =
+                ScreenshotSupport.encodedWatermarkPresets(portable)
+        }
+        // Preset pictures are private files on this Mac. A backup carries the
+        // visual settings, never authority to read a caller-supplied image path.
+        if let data = settings[DefaultsKey.recorderEditorPresets] as? Data,
+           var presets = try? JSONDecoder().decode([RecorderEditPreset].self, from: data) {
+            for index in presets.indices where presets[index].images?.isEmpty == false {
+                presets[index].images = nil
+            }
+            settings[DefaultsKey.recorderEditorPresets] = try? JSONEncoder().encode(presets)
+        }
+        if let rawProfiles = settings[DefaultsKey.mediaImageProfiles] as? String {
+            if let portableProfiles = MediaSupport.portableImageProfiles(rawProfiles) {
+                settings[DefaultsKey.mediaImageProfiles] = portableProfiles
+            } else {
+                settings.removeValue(forKey: DefaultsKey.mediaImageProfiles)
+            }
+        }
+        guard let kind = settings[DefaultsKey.mediaImageWatermarkKind] as? String else {
+            return settings
+        }
+        let hasText = ((settings[DefaultsKey.mediaImageWatermarkText] as? String) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        switch MediaImageWatermarkKind.sanitized(kind) {
+        case .logo:
+            settings[DefaultsKey.mediaImageWatermarkKind] = MediaImageWatermarkKind.off.rawValue
+        case .textAndLogo:
+            settings[DefaultsKey.mediaImageWatermarkKind] = hasText
+                ? MediaImageWatermarkKind.text.rawValue : MediaImageWatermarkKind.off.rawValue
+        case .off, .text:
+            break
+        }
+        return settings
+    }
+
+    /// Only a choice already made on this Mac can supply an image. A portable
+    /// image style keeps its appearance, but cannot select a file on another Mac.
+    static func restoredScreenshotWatermark(restored: String?, local: String?) -> String {
+        var style = restored?.data(using: .utf8).flatMap {
+            try? JSONDecoder().decode(ScreenshotSupport.WatermarkStyle.self, from: $0)
+        } ?? ScreenshotSupport.WatermarkStyle()
+        style.imagePath = ScreenshotSupport.WatermarkStyle.decoded(local).imagePath
+        return style.sanitized().encoded()
+    }
+
+    /// Image presets stay on their original Mac. Reserve their places before
+    /// taking portable text presets, so a restore never discards a local image.
+    static func restoredScreenshotWatermarkPresets(restored: String?, local: String?) -> String {
+        let pictures = ScreenshotSupport.decodedWatermarkPresets(local).filter { $0.kind == .image }
+        let text = ScreenshotSupport.decodedWatermarkPresets(restored)
+            .filter { $0.kind == .text }
+            .map { style in
+                var style = style
+                style.imagePath = nil
+                return style
+            }
+        return ScreenshotSupport.encodedWatermarkPresets(
+            Array(text.suffix(ScreenshotSupport.backdropPresetLimit - pictures.count)) + pictures)
+    }
+
+    /// Restoring settings on the same Mac keeps the pictures already owned by
+    /// matching presets, just as mouse exceptions keep their local paths.
+    static func preservingLocalPresetImages(restored: Data, local: Data?) -> Data {
+        guard var presets = try? JSONDecoder().decode([RecorderEditPreset].self, from: restored),
+              let local,
+              let localPresets = try? JSONDecoder().decode([RecorderEditPreset].self, from: local)
+        else { return restored }
+        for index in presets.indices where presets[index].images == nil {
+            let id = presets[index].id
+            presets[index].images = localPresets.first { $0.id == id }?.images
+        }
+        return (try? JSONEncoder().encode(presets)) ?? restored
+    }
+
+    /// A backup is a file the user can hand around and edit, so a value has to
+    /// look like the setting it claims to be before it is written back. The
+    /// registered defaults already say what each setting is, and a value of
+    /// the wrong shape is dropped rather than restored: a number where a
+    /// switch belongs, or text where a number belongs, would otherwise reach
+    /// code that trusts its own settings.
+    static func valueLooksRight(_ key: String, _ value: Any) -> Bool {
+        switch key {
+        case DefaultsKey.notchQuickAccessSide, DefaultsKey.notchQuickAccessSecond, DefaultsKey.notchQuickAccessThird:
+            return value is String
+        default: break
+        }
+        guard let expected = Defaults.registeredDefaults[key] else {
+            // Not a registered setting, so there is nothing to compare
+            // against; the allowed list is the only gate for these.
+            return true
+        }
+        switch expected {
+        case is Bool: return isBoolean(value)
+        case is Int: return isInteger(value)
+        case is Double: return isNumber(value)
+        case is String: return value is String
+        case is [String]: return value is [String]
+        case is [String: String]: return value is [String: String]
+        case is [Any]: return value is [Any]
+        case is [String: Any]: return value is [String: Any]
+        default: return true
+        }
+    }
+
+    private static func number(_ value: Any) -> NSNumber? {
+        value as? NSNumber
+    }
+
+    private static func isBoolean(_ value: Any) -> Bool {
+        guard let value = number(value) else { return false }
+        return CFGetTypeID(value) == CFBooleanGetTypeID()
+    }
+
+    private static func isInteger(_ value: Any) -> Bool {
+        guard let value = number(value), CFGetTypeID(value) != CFBooleanGetTypeID() else {
+            return false
+        }
+        return !CFNumberIsFloatType(unsafeBitCast(value, to: CFNumber.self))
+    }
+
+    private static func isNumber(_ value: Any) -> Bool {
+        guard let value = number(value), CFGetTypeID(value) != CFBooleanGetTypeID() else {
+            return false
+        }
+        return value.doubleValue.isFinite
+    }
+}

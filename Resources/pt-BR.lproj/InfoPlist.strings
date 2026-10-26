@@ -1,0 +1,24 @@
+/* macOS Automation permission prompt. */
+"NSAppleEventsUsageDescription" = "O SasNotch usa a Automação para mover arquivos, enviar itens ao Lixo, abrir comandos solicitados e controlar a reprodução nos seus apps de mídia.";
+
+/* macOS Screen & System Audio Recording permission prompt. */
+"NSAudioCaptureUsageDescription" = "O SasNotch usa o áudio de cada app para ajustar o volume no mixer, para mover as barras de música da Dynamic Island e para incluir o som do Mac nas gravações de tela que você iniciar. Nada sai do seu Mac.";
+
+/* macOS Bluetooth permission prompt. */
+"NSBluetoothAlwaysUsageDescription" = "O SasNotch usa o Bluetooth apenas para ler a bateria dos periféricos conectados. Nada sai do seu Mac.";
+
+/* macOS Microphone permission prompt. */
+"NSMicrophoneUsageDescription" = "O SasNotch grava seu microfone apenas quando você o ativa em uma gravação de tela. O áudio fica no seu Mac, a menos que você escolha criar um link temporário.";
+
+/* macOS Camera permission prompt. */
+"NSCameraUsageDescription" = "O SasNotch mostra sua câmera apenas na janela de prévia que você abre, para conferir como você está antes de uma chamada. Nada é gravado nem sai do seu Mac.";
+
+/* macOS Downloads folder permission prompt. */
+"NSDownloadsFolderUsageDescription" = "O SasNotch consulta metadados locais em Downloads para revisar, organizar ou mover para a Lixeira apenas os arquivos confirmados do WhatsApp que você escolher. A Limpeza também procura capturas de tela esquecidas quando você as salva aqui.";
+
+/* macOS user-selected organizer destination prompts. */
+"NSDesktopFolderUsageDescription" = "O SasNotch organiza downloads confirmados do WhatsApp em uma pasta de destino escolhida explicitamente por você. A Limpeza também procura capturas de tela esquecidas quando você as salva aqui.";
+"NSDocumentsFolderUsageDescription" = "O SasNotch organiza downloads confirmados do WhatsApp em uma pasta de destino escolhida explicitamente por você. A Limpeza também procura capturas de tela esquecidas quando você as salva aqui.";
+"NSNetworkVolumesUsageDescription" = "O SasNotch organiza downloads confirmados do WhatsApp em uma pasta de destino escolhida explicitamente por você. A Limpeza também procura capturas de tela esquecidas quando você as salva aqui.";
+"NSRemovableVolumesUsageDescription" = "O SasNotch organiza downloads confirmados do WhatsApp em uma pasta de destino escolhida explicitamente por você. A Limpeza também procura capturas de tela esquecidas quando você as salva aqui.";
+"NSCalendarsFullAccessUsageDescription" = "Mostra seus próximos compromissos na parte superior da tela. Os eventos do calendário ficam neste Mac.";

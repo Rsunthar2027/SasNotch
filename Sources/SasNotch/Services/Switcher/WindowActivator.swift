@@ -1,0 +1,1394 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Vorssaint
+// Modified for SasNotch by SasNotch contributors, 2026
+
+import AppKit
+import ApplicationServices
+
+private let switcherAXPressedNotification = "AXPressed"
+
+/// Brings a switcher selection to the front: unminimizes if needed, makes the
+/// exact window the app's focused/main Accessibility window and activates the
+/// owning app. The focus pass is repeated after activation because Space changes
+/// are asynchronous and some apps settle their main window one run-loop later.
+enum WindowActivator {
+    private static let focusRetryDelay: TimeInterval = 0.12
+    private static let fullscreenFocusRetryDelays: [TimeInterval] = [0.18, 0.38, 0.68]
+    private static var pendingMinimizeRestore: SwitcherWindowMinimizeRestore?
+    private static var pendingWindowClose: SwitcherPendingWindowClose?
+    private static var windowCloseGeneration: UInt64 = 0
+    private static let activationLock = NSLock()
+    private static var activationGeneration: UInt64 = 0
+    private static var activationGenerationsByPID: [pid_t: UInt64] = [:]
+
+    static func activate(_ item: SwitcherItem,
+                         retry: Bool = true,
+                         sourceWasFullscreen: Bool = false,
+                         sourcePID: pid_t? = nil,
+                         handoffSourcePID: pid_t? = nil,
+                         sourceWindowID: CGWindowID? = nil,
+                         sourceWindowOwnerPID: pid_t? = nil) {
+        let generation = supersedePendingActivations(for: item.pid)
+
+        if item.pid == ProcessInfo.processInfo.processIdentifier {
+            activateOwnWindow(item)
+            return
+        }
+
+        guard let app = NSRunningApplication(processIdentifier: item.pid) else { return }
+        // Only the delayed focus guards may treat a caller's handoff app as
+        // the source. The minimize restore, source staging and Space hops stay
+        // limited to the App Switcher session source.
+        let retrySourcePID = SwitcherSupport.focusRetrySourcePID(
+            sessionSourcePID: sourcePID,
+            handoffSourcePID: handoffSourcePID,
+            targetPID: item.pid
+        )
+        let windowOwnerPID = item.windowOwnerPID
+
+        // Unhiding an app that is not hidden still brings every one of its
+        // windows forward (measured on macOS 27.2), so a window selection
+        // raised its siblings before fronting the window (issue #1503).
+        if app.isHidden { app.unhide() }
+        let activationPlan = SwitcherSupport.activationPlan(
+            targetsSpecificWindow: item.windowID != nil
+        )
+        guard let windowID = item.windowID else {
+            let retryState = retry && sourceWasFullscreen
+                ? SwitcherAppActivationRetryState(targetPID: item.pid)
+                : nil
+            activateApp(app, plan: activationPlan)
+            if let bundleURL = app.bundleURL {
+                let configuration = NSWorkspace.OpenConfiguration()
+                configuration.activates = false
+                configuration.addsToRecentItems = false
+                configuration.promptsUserIfNeeded = false
+                NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration)
+            }
+            if let retryState {
+                scheduleAppActivationRetries(targetPID: item.pid,
+                                             sourcePID: retrySourcePID,
+                                             plan: activationPlan,
+                                             state: retryState,
+                                             generation: generation,
+                                             delays: Self.fullscreenFocusRetryDelays)
+            }
+            return
+        }
+        let targetStartedMinimized = item.isMinimized
+            || windowIsMinimized(windowID: windowID, pid: windowOwnerPID)
+        // A window parked on a Space that is not visible cannot be reached by
+        // the Accessibility passes below; the hop travels there first and then
+        // runs the same focus pass on arrival (issue #339). A minimized window
+        // keeps its Accessibility element and can be deminiaturized directly
+        // on the regular path without relying on Space shortcuts being enabled.
+        if !targetStartedMinimized,
+           SpaceHop.beginIfNeeded(windowID: windowID,
+                                  appPID: item.pid,
+                                  windowOwnerPID: windowOwnerPID,
+                                  sourcePID: sourcePID,
+                                  app: app) {
+            return
+        }
+        // Only paths that schedule a focus pass need a snapshot. Include all
+        // of the owner's windows, even minimized, off-Space and auxiliary ones.
+        let knownWindowIDs = retry || sourceWasFullscreen || item.isFullscreen
+            ? windowIDs(ownerPID: windowOwnerPID, options: .optionAll)
+            : []
+        watchTargetMinimizeIfNeeded(windowID: windowID,
+                                    targetPID: item.pid,
+                                    targetWindowOwnerPID: windowOwnerPID,
+                                    sourcePID: sourcePID,
+                                    sourceWindowID: sourceWindowID,
+                                    sourceWindowOwnerPID: sourceWindowOwnerPID,
+                                    activationPlan: activationPlan)
+        prepareWindowForActivation(windowID: windowID, pid: windowOwnerPID)
+        if sourceWasFullscreen || item.isFullscreen {
+            let retryState = SwitcherWindowFocusRetryState(
+                targetWindowID: windowID,
+                targetStartedMinimized: targetStartedMinimized,
+                knownWindowIDs: knownWindowIDs
+            )
+            retryState.observe(
+                targetMinimizedState: windowMinimizedState(windowID: windowID, pid: windowOwnerPID)
+            )
+            activateApp(app, plan: activationPlan, windowID: windowID, windowOwnerPID: windowOwnerPID)
+            guard retry else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.fullscreenFocusRetryDelays[0]) {
+                    guard isCurrentActivation(generation),
+                          shouldContinueFocusRetry(windowID: windowID,
+                                                   targetPID: item.pid,
+                                                   targetWindowOwnerPID: windowOwnerPID,
+                                                   sourcePID: retrySourcePID,
+                                                   state: retryState,
+                                                   stopsWhenTargetFocused: false),
+                          let app = NSRunningApplication(processIdentifier: item.pid),
+                          !app.isTerminated else { return }
+                    prepareWindowForActivation(windowID: windowID, pid: windowOwnerPID)
+                    activateApp(app, plan: activationPlan, windowID: windowID, windowOwnerPID: windowOwnerPID)
+                    stageSourceBehindTargetIfNeeded(targetWindowID: windowID,
+                                                    targetPID: item.pid,
+                                                    targetWindowOwnerPID: windowOwnerPID,
+                                                    sourcePID: sourcePID,
+                                                    sourceWindowID: sourceWindowID,
+                                                    sourceWindowOwnerPID: sourceWindowOwnerPID,
+                                                    activationPlan: activationPlan)
+                }
+                return
+            }
+            scheduleFocusRetries(windowID: windowID,
+                                  targetPID: item.pid,
+                                  targetWindowOwnerPID: windowOwnerPID,
+                                  sourcePID: sourcePID,
+                                  retrySourcePID: retrySourcePID,
+                                  sourceWindowID: sourceWindowID,
+                                  sourceWindowOwnerPID: sourceWindowOwnerPID,
+                                  state: retryState,
+                                  activationPlan: activationPlan,
+                                  generation: generation,
+                                  delays: Self.fullscreenFocusRetryDelays,
+                                  stopsWhenTargetFocused: false)
+            return
+        }
+
+        activateApp(app, plan: activationPlan, windowID: windowID, windowOwnerPID: windowOwnerPID)
+        stageSourceBehindTargetIfNeeded(targetWindowID: windowID,
+                                        targetPID: item.pid,
+                                        targetWindowOwnerPID: windowOwnerPID,
+                                        sourcePID: sourcePID,
+                                        sourceWindowID: sourceWindowID,
+                                        sourceWindowOwnerPID: sourceWindowOwnerPID,
+                                        activationPlan: activationPlan)
+
+        guard retry else { return }
+        let retryState = SwitcherWindowFocusRetryState(
+            targetWindowID: windowID,
+            targetStartedMinimized: targetStartedMinimized,
+            knownWindowIDs: knownWindowIDs
+        )
+        retryState.observe(
+            targetMinimizedState: windowMinimizedState(windowID: windowID, pid: windowOwnerPID)
+        )
+        scheduleFocusRetries(windowID: windowID,
+                              targetPID: item.pid,
+                              targetWindowOwnerPID: windowOwnerPID,
+                              sourcePID: sourcePID,
+                              retrySourcePID: retrySourcePID,
+                              sourceWindowID: sourceWindowID,
+                              sourceWindowOwnerPID: sourceWindowOwnerPID,
+                              state: retryState,
+                              activationPlan: activationPlan,
+                              generation: generation,
+                              delays: [focusRetryDelay],
+                              stopsWhenTargetFocused: true)
+    }
+
+    static func activate(pid: pid_t,
+                         windowID: CGWindowID?,
+                         appName: String,
+                         retry: Bool = true,
+                         handoffSourcePID: pid_t? = nil) {
+        let item: SwitcherItem
+        if let windowID {
+            item = .window(id: windowID, title: appName, appName: appName,
+                           pid: pid, isOnScreen: true, frame: .zero)
+        } else {
+            item = .appOnly(appName: appName, pid: pid)
+        }
+        activate(item, retry: retry, handoffSourcePID: handoffSourcePID)
+    }
+
+    static func focusedWindowID(for pid: pid_t) -> CGWindowID? {
+        guard AXIsProcessTrusted() else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.35)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return nil }
+        return AXWindowResolver.windowID(for: value as! AXUIElement)
+    }
+
+    static func windowIsMinimized(windowID: CGWindowID, pid: pid_t) -> Bool {
+        windowMinimizedState(windowID: windowID, pid: pid) == true
+    }
+
+    /// Undo only a verified work-area constraint from the preview's Dock hold.
+    static func restoreFrameAfterDockHold(_ item: SwitcherItem, original: CGRect,
+                                         heldVisibleFrame: CGRect) {
+        guard Permissions.shared.accessibility, let windowID = item.windowID else { return }
+        let app = AXUIElementCreateApplication(item.windowOwnerPID)
+        AXUIElementSetMessagingTimeout(app, 0.35)
+        guard let window = axElement(windowID: windowID, in: app, pid: item.windowOwnerPID),
+              !boolAttribute(window, "AXFullScreen", default: true),
+              minimizedState(of: window) == false else { return }
+        var positionValue: CFTypeRef?
+        var sizeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &positionValue) == .success,
+              AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeValue) == .success,
+              let positionValue, CFGetTypeID(positionValue) == AXValueGetTypeID(),
+              let sizeValue, CFGetTypeID(sizeValue) == AXValueGetTypeID() else { return }
+        var origin = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &origin),
+              AXValueGetValue(sizeValue as! AXValue, .cgSize, &size),
+              DockPreviewFrameSupport.wasConstrained(CGRect(origin: origin, size: size),
+                                                     original: original, visibleFrame: heldVisibleFrame)
+        else { return }
+        origin = original.origin
+        size = original.size
+        guard let position = AXValueCreate(.cgPoint, &origin),
+              let dimensions = AXValueCreate(.cgSize, &size) else { return }
+        let suspension = EnhancedUserInterfaceSuspension.suspend(forAppOf: window)
+        defer { suspension?.resume() }
+        AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
+        AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, dimensions)
+        AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
+    }
+
+    /// Three-state minimized check for callers that must distinguish a window
+    /// reported as restored from one that could not be resolved or queried.
+    static func windowMinimizedState(windowID: CGWindowID, pid: pid_t) -> Bool? {
+        guard Permissions.shared.accessibility else { return nil }
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        // Observation runs before a hop and on every focus retry. Leave the
+        // remote scan to an explicit window action instead of repeating it here.
+        guard let axWindow = axElement(windowID: windowID, in: axApp) else { return nil }
+        return minimizedState(of: axWindow)
+    }
+
+    /// Moves a window's top-left corner to a global Accessibility point.
+    ///
+    /// Our own windows are refused rather than special-cased: reading this
+    /// process's own Accessibility tree from the main thread is the one call
+    /// that can deadlock, and SasNotch has no Dock icon to drag a preview
+    /// from in the first place.
+    @discardableResult
+    static func setWindowOrigin(_ origin: CGPoint, windowID: CGWindowID, pid: pid_t) -> Bool {
+        guard Permissions.shared.accessibility,
+              pid != ProcessInfo.processInfo.processIdentifier else { return false }
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        guard let axWindow = axElement(windowID: windowID, in: axApp, pid: pid) else { return false }
+        var origin = origin
+        guard let value = AXValueCreate(.cgPoint, &origin) else { return false }
+        return AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, value) == .success
+    }
+
+    /// Puts a window where a drag dropped it. Every window takes the same four
+    /// steps in the same order whatever state it was in, because a drop that
+    /// stops to check on a minimized window feels like a different gesture from
+    /// a drop that does not. Un-minimizing a window that is already out returns
+    /// immediately, so the step costs one attribute read.
+    ///
+    /// The position goes on before the window is restored: the restore then
+    /// ends at the drop point rather than flying to the window's old place.
+    @discardableResult
+    static func place(_ item: SwitcherItem, origin: CGPoint, pointer: CGPoint) -> Bool {
+        guard Permissions.shared.accessibility,
+              let windowID = item.windowID,
+              item.windowOwnerPID != ProcessInfo.processInfo.processIdentifier
+        else { return false }
+        let pid = item.windowOwnerPID
+
+        if item.isAppHidden {
+            NSRunningApplication(processIdentifier: item.pid)?.unhide()
+        }
+        let placed = setWindowOrigin(origin, windowID: windowID, pid: pid)
+        SpaceWindowBridge.moveToVisibleSpace(windowID, near: pointer)
+        setWindowMinimized(false, windowID: windowID, pid: pid)
+        return placed
+    }
+
+    /// Hands the keyboard to a window a drag just placed. Dropping a window
+    /// somewhere is a request to use it, and the app-level activation that
+    /// follows raises the app without saying which of its windows the user was
+    /// pointing at.
+    static func focusPlacedWindow(_ item: SwitcherItem) {
+        guard let windowID = item.windowID,
+              item.windowOwnerPID != ProcessInfo.processInfo.processIdentifier
+        else { return }
+        SpaceWindowBridge.frontWindow(windowID, ownerPID: item.windowOwnerPID)
+    }
+
+    @discardableResult
+    static func setWindowMinimized(_ minimized: Bool, windowID: CGWindowID, pid: pid_t) -> Bool {
+        if pid == ProcessInfo.processInfo.processIdentifier {
+            guard let window = NSApp.windows.first(where: { $0.windowNumber == Int(windowID) }) else { return false }
+            if minimized {
+                window.miniaturize(nil)
+            } else {
+                window.deminiaturize(nil)
+            }
+            return true
+        }
+
+        guard Permissions.shared.accessibility else { return false }
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        guard let axWindow = axElement(windowID: windowID, in: axApp, pid: pid) else { return false }
+        if minimizedState(of: axWindow) == minimized { return true }
+
+        let setResult = AXUIElementSetAttributeValue(axWindow,
+                                                     kAXMinimizedAttribute as CFString,
+                                                     minimized ? kCFBooleanTrue : kCFBooleanFalse)
+        if setResult == .success, minimizedState(of: axWindow) == minimized {
+            return true
+        }
+
+        guard minimized else {
+            return setResult == .success
+        }
+        guard let minimizeButton = elementAttribute(axWindow, kAXMinimizeButtonAttribute as String),
+              boolAttribute(minimizeButton, kAXEnabledAttribute as String, default: true)
+        else {
+            return setResult == .success
+        }
+        return AXUIElementPerformAction(minimizeButton, kAXPressAction as CFString) == .success
+            || setResult == .success
+    }
+
+    /// True means the close request was delivered or its response timed out;
+    /// the window may remain open for a save dialog. Callers verify removal.
+    static func closeWindow(windowID: CGWindowID,
+                            appPID: pid_t,
+                            windowOwnerPID: pid_t) -> Bool {
+        if appPID == ProcessInfo.processInfo.processIdentifier {
+            guard let window = NSApp.windows.first(where: { $0.windowNumber == Int(windowID) }) else { return false }
+            window.close()
+            return true
+        }
+
+        guard Permissions.shared.accessibility else { return false }
+        let axApp = AXUIElementCreateApplication(windowOwnerPID)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        guard let axWindow = closableElement(windowID: windowID, in: axApp, pid: windowOwnerPID),
+              let closeButton = elementAttribute(axWindow, kAXCloseButtonAttribute as String)
+        else { return false }
+        // AX timeouts belong to each object, not its children.
+        AXUIElementSetMessagingTimeout(closeButton, 0.35)
+        guard boolAttribute(closeButton, kAXEnabledAttribute as String, default: true) else { return false }
+
+        AutoQuitService.shared.recordProgrammaticCloseRequest(pid: appPID)
+        let result = AXUIElementPerformAction(closeButton, kAXPressAction as CFString)
+        // A save dialog may keep an action callback inside a modal loop until
+        // it times out. The request can already have arrived; never press again
+        // or leave fullscreen merely because its answer was cannotComplete.
+        return result == .success || result == .cannotComplete
+    }
+
+    /// Reuse the shared resolver for published and hidden-Space windows,
+    /// including fullscreen ones, without travelling first (issue #2708).
+    private static func closableElement(windowID: CGWindowID, in axApp: AXUIElement, pid: pid_t) -> AXUIElement? {
+        guard let window = axElement(windowID: windowID, in: axApp, pid: pid)
+        else { return nil }
+        AXUIElementSetMessagingTimeout(window, 0.35)
+        return window
+    }
+
+    /// A fullscreen window keeps its close button disabled (measured on macOS
+    /// 26.6). True when it was asked to leave fullscreen, so a close can follow.
+    private static func leaveFullscreenToClose(windowID: CGWindowID, pid: pid_t) -> Bool {
+        guard Permissions.shared.accessibility else { return false }
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        guard let axWindow = closableElement(windowID: windowID, in: axApp, pid: pid),
+              boolAttribute(axWindow, "AXFullScreen", default: false)
+        else { return false }
+        return AXUIElementSetAttributeValue(axWindow, "AXFullScreen" as CFString, kCFBooleanFalse) == .success
+    }
+
+    /// Keeps the regular close path immediate. A fullscreen window first leaves
+    /// fullscreen, a hidden app is temporarily revealed, and a hidden-Space
+    /// target the lookup missed reuses the verified Space hop; each path polls
+    /// until Accessibility can close that exact window.
+    static func closeWindowIncludingHiddenState(_ item: SwitcherItem,
+                                                completion: @escaping (Bool) -> Void) {
+        windowCloseGeneration &+= 1
+        let requestGeneration = windowCloseGeneration
+        pendingWindowClose?.cancel()
+        // Cancellation calls completion, which can start a newer request.
+        guard windowCloseGeneration == requestGeneration,
+              pendingWindowClose == nil, let windowID = item.windowID else {
+            completion(false)
+            return
+        }
+        let app = NSRunningApplication(processIdentifier: item.pid)
+        let appNeedsReveal = item.isAppHidden || app?.isHidden == true
+        let windowNeedsSpaceHop = SpaceWindowBridge.isParkedOnHiddenSpace(windowID)
+        let observesCloseResult = appNeedsReveal || windowNeedsSpaceHop
+        let generation = currentActivationGeneration()
+        let foregroundPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let foregroundWindowID = observesCloseResult ? foregroundPID.flatMap { focusedWindowID(for: $0) } : nil
+        if closeWindow(windowID: windowID,
+                       appPID: item.pid,
+                       windowOwnerPID: item.windowOwnerPID) {
+            if observesCloseResult {
+                let pending = SwitcherPendingWindowClose(item: item,
+                                                         restoresHiddenApp: false,
+                                                         usesSpaceHop: false,
+                                                         observesCloseResult: true,
+                                                         closeWasRequested: true,
+                                                         generation: generation,
+                                                         foregroundPID: foregroundPID,
+                                                         foregroundWindowID: foregroundWindowID,
+                                                         completion: completion)
+                pendingWindowClose = pending
+                pending.start()
+            } else {
+                completion(true)
+            }
+            return
+        }
+        if leaveFullscreenToClose(windowID: windowID, pid: item.windowOwnerPID) {
+            let pending = SwitcherPendingWindowClose(item: item,
+                                                     restoresHiddenApp: false,
+                                                     usesSpaceHop: false,
+                                                     leavesFullscreen: true,
+                                                     observesCloseResult: observesCloseResult,
+                                                     generation: generation,
+                                                     foregroundPID: foregroundPID,
+                                                     foregroundWindowID: foregroundWindowID,
+                                                     completion: completion)
+            pendingWindowClose = pending
+            pending.start()
+            return
+        }
+        guard appNeedsReveal || windowNeedsSpaceHop else {
+            completion(false)
+            return
+        }
+        let pending = SwitcherPendingWindowClose(item: item,
+                                                 restoresHiddenApp: appNeedsReveal,
+                                                 usesSpaceHop: windowNeedsSpaceHop,
+                                                 observesCloseResult: observesCloseResult,
+                                                 generation: generation,
+                                                 foregroundPID: foregroundPID,
+                                                 foregroundWindowID: foregroundWindowID,
+                                                 completion: completion)
+        pendingWindowClose = pending
+        pending.start()
+    }
+
+    @discardableResult
+    fileprivate static func finishPendingWindowClose(_ pending: SwitcherPendingWindowClose,
+                                                     success: Bool) -> Bool {
+        guard pendingWindowClose === pending else { return false }
+        let requestGeneration = windowCloseGeneration
+        pendingWindowClose = nil
+        if pending.usesSpaceHop {
+            SpaceHop.cancelPending()
+        }
+        pending.finish(success: success)
+        // Completion can start another close synchronously.
+        return pendingWindowClose == nil && windowCloseGeneration == requestGeneration
+    }
+
+    fileprivate static func windowExistsForClose(windowID: CGWindowID, ownerPID: pid_t) -> Bool? {
+        guard let raw = CGWindowListCopyWindowInfo(.optionIncludingWindow, windowID) as? [[String: Any]]
+        else { return nil }
+        return raw.contains {
+            ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == windowID
+                && ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == ownerPID
+        }
+    }
+
+    private static func activateOwnWindow(_ item: SwitcherItem) {
+        guard let windowID = item.windowID,
+              let window = NSApp.windows.first(where: { $0.windowNumber == Int(windowID) }) else { return }
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
+
+    /// Prefer the selected window, but retain cooperative activation when the
+    /// private request or the Accessibility raise cannot be delivered. An
+    /// accessory window owner cannot supply its regular host's menu bar.
+    private static func activateApp(_ app: NSRunningApplication,
+                                    plan: SwitcherActivationPlan,
+                                    windowID: CGWindowID? = nil,
+                                    windowOwnerPID: pid_t? = nil) {
+        if case .exactWindow(let windowID) = SwitcherSupport.appActivationRoute(plan: plan, windowID: windowID) {
+            let ownerPID = windowOwnerPID ?? app.processIdentifier
+            if ownerPID != app.processIdentifier {
+                activateAppCooperatively(app, allWindows: false)
+            }
+            if SpaceWindowBridge.frontWindow(windowID, ownerPID: ownerPID),
+               focusWindow(windowID: windowID, pid: ownerPID, makeAppFrontmost: false) {
+                return
+            }
+        }
+        activateAppCooperatively(app, allWindows: plan.activateAllWindows)
+        if let windowID {
+            focusWindow(windowID: windowID,
+                        pid: windowOwnerPID ?? app.processIdentifier,
+                        makeAppFrontmost: false)
+        }
+    }
+
+    private static func activateAppCooperatively(_ app: NSRunningApplication, allWindows: Bool) {
+        let options: NSApplication.ActivationOptions = allWindows ? [.activateAllWindows] : []
+        ActivationHandoff.yield(to: app)
+        if !app.activate(from: NSRunningApplication.current, options: options) {
+            app.activate(options: options)
+        }
+    }
+
+    static func supersedePendingActivations(for pid: pid_t) -> UInt64 {
+        let generation = beginActivation(for: pid)
+        cancelPendingMinimizeRestore()
+        SpaceHop.cancelPending()
+        return generation
+    }
+
+    private static func beginActivation(for pid: pid_t) -> UInt64 {
+        activationLock.withLock {
+            activationGeneration &+= 1
+            activationGenerationsByPID[pid] = activationGeneration
+            return activationGeneration
+        }
+    }
+
+    fileprivate static func activationGeneration(for pid: pid_t) -> UInt64 {
+        activationLock.withLock { activationGenerationsByPID[pid] ?? 0 }
+    }
+
+    fileprivate static func currentActivationGeneration() -> UInt64 {
+        activationLock.withLock { activationGeneration }
+    }
+
+    static func isCurrentActivation(_ generation: UInt64) -> Bool {
+        activationLock.withLock {
+            SwitcherSupport.isCurrentActivationGeneration(
+                generation,
+                current: activationGeneration
+            )
+        }
+    }
+
+    private static func scheduleFocusRetries(windowID: CGWindowID,
+                                             targetPID: pid_t,
+                                             targetWindowOwnerPID: pid_t,
+                                             sourcePID: pid_t?,
+                                             retrySourcePID: pid_t?,
+                                             sourceWindowID: CGWindowID?,
+                                             sourceWindowOwnerPID: pid_t?,
+                                             state: SwitcherWindowFocusRetryState,
+                                             activationPlan: SwitcherActivationPlan,
+                                             generation: UInt64,
+                                             delays: [TimeInterval],
+                                             stopsWhenTargetFocused: Bool = false) {
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard isCurrentActivation(generation),
+                      shouldContinueFocusRetry(windowID: windowID,
+                                               targetPID: targetPID,
+                                               targetWindowOwnerPID: targetWindowOwnerPID,
+                                               sourcePID: retrySourcePID,
+                                               state: state,
+                                               stopsWhenTargetFocused: stopsWhenTargetFocused),
+                      let app = NSRunningApplication(processIdentifier: targetPID),
+                      !app.isTerminated else { return }
+                prepareWindowForActivation(windowID: windowID, pid: targetWindowOwnerPID)
+                activateApp(app, plan: activationPlan, windowID: windowID, windowOwnerPID: targetWindowOwnerPID)
+                stageSourceBehindTargetIfNeeded(targetWindowID: windowID,
+                                                targetPID: targetPID,
+                                                targetWindowOwnerPID: targetWindowOwnerPID,
+                                                sourcePID: sourcePID,
+                                                sourceWindowID: sourceWindowID,
+                                                sourceWindowOwnerPID: sourceWindowOwnerPID,
+                                                activationPlan: activationPlan)
+            }
+        }
+    }
+
+    private static func scheduleAppActivationRetries(targetPID: pid_t,
+                                                     sourcePID: pid_t?,
+                                                     plan: SwitcherActivationPlan,
+                                                     state: SwitcherAppActivationRetryState,
+                                                     generation: UInt64,
+                                                     delays: [TimeInterval]) {
+        guard !delays.isEmpty else {
+            state.invalidate()
+            return
+        }
+        for (index, delay) in delays.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard state.isActive, isCurrentActivation(generation) else {
+                    state.invalidate()
+                    return
+                }
+                let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+                state.observe(frontmostPID: frontmostPID)
+                guard SwitcherSupport.shouldContinueAppActivationRetry(
+                    targetPID: targetPID,
+                    sourcePID: sourcePID,
+                    frontmostPID: frontmostPID,
+                    targetWasObservedFrontmost: state.targetWasObservedFrontmost
+                ) else {
+                    state.invalidate()
+                    return
+                }
+                guard let app = NSRunningApplication(processIdentifier: targetPID),
+                      !app.isTerminated else {
+                    state.invalidate()
+                    return
+                }
+                activateApp(app, plan: plan)
+                if index == delays.count - 1 {
+                    state.invalidate()
+                }
+            }
+        }
+    }
+
+    private static func windowIDs(ownerPID: pid_t, options: CGWindowListOption) -> Set<CGWindowID> {
+        let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
+        return SwitcherSupport.focusRetryWindowIDs(in: raw, ownerPID: ownerPID)
+    }
+
+    private static func shouldContinueFocusRetry(windowID: CGWindowID,
+                                                 targetPID: pid_t,
+                                                 targetWindowOwnerPID: pid_t,
+                                                 sourcePID: pid_t?,
+                                                 state: SwitcherWindowFocusRetryState,
+                                                 ignoresForeground: Bool = false,
+                                                 stopsWhenTargetFocused: Bool = false) -> Bool {
+        guard state.isActive else { return false }
+        func currentFrontmostPID() -> pid_t? {
+            let reported = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            return reported == targetWindowOwnerPID ? targetPID : reported
+        }
+        let minimizedState = windowMinimizedState(windowID: windowID,
+                                                  pid: targetWindowOwnerPID)
+        var resolvedFocusedWindowID: CGWindowID?
+        var didResolveFocusedWindowID = false
+        func currentFocusedWindowID() -> CGWindowID? {
+            guard !didResolveFocusedWindowID else { return resolvedFocusedWindowID }
+            didResolveFocusedWindowID = true
+            resolvedFocusedWindowID = focusedWindowID(for: targetWindowOwnerPID)
+            return resolvedFocusedWindowID
+        }
+        return state.shouldContinue(
+            targetPID: targetPID,
+            sourcePID: sourcePID,
+            frontmostPID: currentFrontmostPID(),
+            targetMinimizedState: minimizedState,
+            // The same scope the snapshot used. The on-screen list lags: a
+            // window the app has just opened is focused, and answered as
+            // focused by Accessibility, before the window server composites
+            // it — so comparing on-screen windows against an all-windows
+            // snapshot reported nothing new in exactly the race this guard
+            // exists for, and the focus reading below was never taken.
+            targetAppWindowIDs: windowIDs(ownerPID: targetWindowOwnerPID, options: .optionAll),
+            targetAppFocusedWindowID: currentFocusedWindowID(),
+            targetWindowIsFocused: currentFocusedWindowID() == windowID,
+            stopsWhenTargetFocused: stopsWhenTargetFocused,
+            ignoresForeground: ignoresForeground
+        )
+    }
+
+    private static func watchTargetMinimizeIfNeeded(windowID: CGWindowID,
+                                                    targetPID: pid_t,
+                                                    targetWindowOwnerPID: pid_t,
+                                                    sourcePID: pid_t?,
+                                                    sourceWindowID: CGWindowID?,
+                                                    sourceWindowOwnerPID: pid_t?,
+                                                    activationPlan: SwitcherActivationPlan) {
+        guard activationPlan.restoreSourceWhenTargetMinimizes,
+              let sourcePID,
+              SwitcherSupport.shouldRestoreSourceAfterTargetMinimize(targetPID: targetPID,
+                                                                     sourcePID: sourcePID,
+                                                                     frontmostPID: targetPID,
+                                                                     targetIsMinimized: true)
+        else { return }
+
+        pendingMinimizeRestore = SwitcherWindowMinimizeRestore(windowID: windowID,
+                                                               targetPID: targetPID,
+                                                               targetWindowOwnerPID: targetWindowOwnerPID,
+                                                               sourcePID: sourcePID,
+                                                               sourceWindowID: sourceWindowID,
+                                                               sourceWindowOwnerPID: sourceWindowOwnerPID)
+    }
+
+    fileprivate static func cancelPendingMinimizeRestore() {
+        pendingMinimizeRestore?.invalidate()
+        pendingMinimizeRestore = nil
+    }
+
+    fileprivate static func cancelPendingMinimizeRestore(_ restore: SwitcherWindowMinimizeRestore) {
+        guard pendingMinimizeRestore === restore else { return }
+        cancelPendingMinimizeRestore()
+    }
+
+    fileprivate static func restoreSourceAfterTargetMinimizeIntent(_ restore: SwitcherWindowMinimizeRestore,
+                                                                   keepPending: Bool = false,
+                                                                   allowSystemPromotion: Bool = false) {
+        guard pendingMinimizeRestore === restore else { return }
+        let reportedFrontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let frontmostPID = reportedFrontmostPID == restore.targetWindowOwnerPID
+            ? restore.targetPID
+            : reportedFrontmostPID
+        guard SwitcherSupport.shouldRestoreSourceAfterTargetMinimizeIntent(
+                targetPID: restore.targetPID,
+                sourcePID: restore.sourcePID,
+                frontmostPID: frontmostPID,
+                focusedWindowID: focusedWindowID(for: restore.targetWindowOwnerPID),
+                targetWindowID: restore.windowID,
+                targetIsMinimized: windowIsMinimized(windowID: restore.windowID,
+                                                     pid: restore.targetWindowOwnerPID),
+                frontmostMatchesTargetBundle: restore.matchesTargetBundle(frontmostPID),
+                frontmostCanBeSystemPromotion: allowSystemPromotion) else { return }
+        guard activateSource(pid: restore.sourcePID,
+                             windowID: restore.sourceWindowID,
+                             windowOwnerPID: restore.sourceWindowOwnerPID) else {
+            cancelPendingMinimizeRestore()
+            return
+        }
+
+        if !keepPending {
+            cancelPendingMinimizeRestore()
+        }
+    }
+
+    @discardableResult
+    private static func activateSource(pid: pid_t,
+                                       windowID: CGWindowID?,
+                                       windowOwnerPID: pid_t?) -> Bool {
+        guard let sourceApp = NSRunningApplication(processIdentifier: pid),
+              !sourceApp.isTerminated else { return false }
+
+        if sourceApp.isHidden { sourceApp.unhide() }
+        if let windowID {
+            prepareWindowForActivation(windowID: windowID, pid: windowOwnerPID ?? pid)
+        }
+        // A missing source window (including a fullscreen source) is still a
+        // return gesture, not a request to raise every window of that app.
+        activateApp(sourceApp,
+                    plan: SwitcherSupport.activationPlan(targetsSpecificWindow: true),
+                    windowID: windowID,
+                    windowOwnerPID: windowOwnerPID ?? pid)
+        return true
+    }
+
+    @discardableResult
+    private static func prepareWindowForActivation(windowID: CGWindowID, pid: pid_t) -> Bool {
+        guard Permissions.shared.accessibility else { return false }
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        guard let axWindow = axElement(windowID: windowID, in: axApp, pid: pid) else { return false }
+
+        var minimized: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axWindow, kAXMinimizedAttribute as CFString, &minimized) == .success,
+           (minimized as? Bool) == true {
+            AXUIElementSetAttributeValue(axWindow, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+        }
+
+        AXUIElementSetAttributeValue(axApp, kAXMainWindowAttribute as CFString, axWindow)
+        AXUIElementSetAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, axWindow)
+        AXUIElementSetAttributeValue(axWindow, kAXMainAttribute as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(axWindow, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString)
+        return true
+    }
+
+    @discardableResult
+    private static func stageSourceBehindTargetIfNeeded(targetWindowID: CGWindowID,
+                                                        targetPID: pid_t,
+                                                        targetWindowOwnerPID: pid_t,
+                                                        sourcePID: pid_t?,
+                                                        sourceWindowID: CGWindowID?,
+                                                        sourceWindowOwnerPID: pid_t?,
+                                                        activationPlan: SwitcherActivationPlan) -> Bool {
+        guard activationPlan.restoreSourceWhenTargetMinimizes,
+              SwitcherSupport.shouldStageSourceBehindTarget(targetPID: targetPID,
+                                                            sourcePID: sourcePID,
+                                                            sourceWindowID: sourceWindowID),
+              let sourcePID,
+              let sourceWindowID,
+              !SpaceWindowBridge.isParkedOnHiddenSpace(sourceWindowID),
+              !SpaceWindowBridge.isParkedOnHiddenSpace(targetWindowID),
+              Permissions.shared.accessibility else { return false }
+
+        let sourceApp = AXUIElementCreateApplication(sourceWindowOwnerPID ?? sourcePID)
+        let targetApp = AXUIElementCreateApplication(targetWindowOwnerPID)
+        AXUIElementSetMessagingTimeout(sourceApp, 0.35)
+        AXUIElementSetMessagingTimeout(targetApp, 0.35)
+        guard let sourceWindow = axElement(windowID: sourceWindowID, in: sourceApp),
+              let targetWindow = axElement(windowID: targetWindowID, in: targetApp) else { return false }
+
+        var sourceMinimized: CFTypeRef?
+        if AXUIElementCopyAttributeValue(sourceWindow, kAXMinimizedAttribute as CFString, &sourceMinimized) == .success,
+           (sourceMinimized as? Bool) == true {
+            return false
+        }
+
+        AXUIElementPerformAction(sourceWindow, kAXRaiseAction as CFString)
+        AXUIElementPerformAction(targetWindow, kAXRaiseAction as CFString)
+        AXUIElementSetAttributeValue(targetApp, kAXMainWindowAttribute as CFString, targetWindow)
+        AXUIElementSetAttributeValue(targetApp, kAXFocusedWindowAttribute as CFString, targetWindow)
+        AXUIElementSetAttributeValue(targetWindow, kAXMainAttribute as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(targetWindow, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        return true
+    }
+
+    @discardableResult
+    private static func focusWindow(windowID: CGWindowID, pid: pid_t, makeAppFrontmost: Bool = true) -> Bool {
+        guard Permissions.shared.accessibility else { return false }
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        guard let axWindow = axElement(windowID: windowID, in: axApp, pid: pid) else { return false }
+
+        var minimized: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axWindow, kAXMinimizedAttribute as CFString, &minimized) == .success,
+           (minimized as? Bool) == true {
+            AXUIElementSetAttributeValue(axWindow, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+        }
+
+        if makeAppFrontmost {
+            AXUIElementSetAttributeValue(axApp, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+        }
+        AXUIElementSetAttributeValue(axApp, kAXMainWindowAttribute as CFString, axWindow)
+        AXUIElementSetAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, axWindow)
+        let raised = AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString)
+        AXUIElementSetAttributeValue(axWindow, kAXMainAttribute as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(axWindow, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        return raised == .success
+    }
+
+    /// Ask the exact hidden-Space window to travel before application activation
+    /// or synthetic input can select a sibling. Success acknowledges the raise;
+    /// SpaceHop still verifies arrival and falls back if no travel takes place.
+    static func raiseWindowOnHiddenSpace(windowID: CGWindowID, pid: pid_t) -> Bool {
+        guard Permissions.shared.accessibility,
+              pid > 0, pid != ProcessInfo.processInfo.processIdentifier else { return false }
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        guard let axWindow = axElement(windowID: windowID, in: axApp, pid: pid) else { return false }
+        AXUIElementSetMessagingTimeout(axWindow, 0.35)
+        AXUIElementSetAttributeValue(axApp, kAXMainWindowAttribute as CFString, axWindow)
+        AXUIElementSetAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, axWindow)
+        AXUIElementSetAttributeValue(axWindow, kAXMainAttribute as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(axWindow, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        return AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString) == .success
+    }
+
+    /// Every window the owner has right now, in the scope the retry guard
+    /// compares against. Taken by a hop at the moment it begins.
+    static func focusSnapshot(ownerPID: pid_t) -> Set<CGWindowID> {
+        windowIDs(ownerPID: ownerPID, options: .optionAll)
+    }
+
+    /// Focus pass run by SpaceHop once the target window's Space became
+    /// visible and Accessibility can finally describe the window.
+    ///
+    /// Its pulses run up to a second after the switch, long enough for the
+    /// user to open a window in the app they just reached — Command-N right
+    /// after switching away from a fullscreen app lands here. They consult the
+    /// same guard as every other delayed pass, so a window the app did not
+    /// have when the hop began ends them instead of being covered.
+    static func focusAfterSpaceHop(windowID: CGWindowID,
+                                   appPID: pid_t,
+                                   windowOwnerPID: pid_t,
+                                   sourcePID: pid_t?,
+                                   state: SwitcherWindowFocusRetryState) {
+        guard let app = NSRunningApplication(processIdentifier: appPID), !app.isTerminated else { return }
+        // Travelling fronts whatever tops each desktop on the way, so this
+        // pass judges the app's own focus rather than who is in front.
+        guard shouldContinueFocusRetry(windowID: windowID,
+                                       targetPID: appPID,
+                                       targetWindowOwnerPID: windowOwnerPID,
+                                       sourcePID: sourcePID,
+                                       state: state,
+                                       ignoresForeground: true) else { return }
+        prepareWindowForActivation(windowID: windowID, pid: windowOwnerPID)
+        activateApp(app,
+                    plan: SwitcherSupport.activationPlan(targetsSpecificWindow: true),
+                    windowID: windowID,
+                    windowOwnerPID: windowOwnerPID)
+    }
+
+    private static func axElement(windowID: CGWindowID, in axApp: AXUIElement, pid: pid_t? = nil) -> AXUIElement? {
+        AXWindowResolver.element(for: windowID, in: axApp, pid: pid)
+    }
+
+    fileprivate static func axElementForMinimizeRestore(windowID: CGWindowID, in axApp: AXUIElement) -> AXUIElement? {
+        axElement(windowID: windowID, in: axApp)
+    }
+
+    fileprivate static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return nil }
+        return (value as! AXUIElement)
+    }
+
+    fileprivate static func boolAttribute(_ element: AXUIElement, _ attribute: String, default defaultValue: Bool) -> Bool {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value
+        else { return defaultValue }
+        return (value as? Bool) ?? defaultValue
+    }
+
+    private static func minimizedState(of axWindow: AXUIElement) -> Bool? {
+        var minimized: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axWindow, kAXMinimizedAttribute as CFString, &minimized) == .success,
+              let minimized
+        else { return nil }
+        if CFGetTypeID(minimized) == CFBooleanGetTypeID() {
+            return CFBooleanGetValue((minimized as! CFBoolean))
+        }
+        return minimized as? Bool
+    }
+}
+
+/// Waits for an explicit close to become possible, then observes its result.
+/// A delivered request is never repeated. A remaining off-Space or hidden
+/// window is revealed so the user can answer its save dialog.
+fileprivate final class SwitcherPendingWindowClose {
+    private static let pollInterval: TimeInterval = 0.1
+    private static let timeout: TimeInterval = 4.0
+    private static let closeResultGrace: TimeInterval = 0.7
+
+    private let item: SwitcherItem
+    private let restoresHiddenApp: Bool
+    fileprivate let usesSpaceHop: Bool
+    private let leavesFullscreen: Bool
+    private let observesCloseResult: Bool
+    private let completion: (Bool) -> Void
+    private let deadline: DispatchTime
+    private var closeWasRequested: Bool
+    private var closeResultDeadline: DispatchTime?
+    private var windowWasClosed = false
+    private var generation: UInt64
+    private let foregroundPID: pid_t?
+    private let foregroundWindowID: CGWindowID?
+    private var focusWasSuperseded = false
+    private var completed = false
+    private var revealGeneration: UInt64?
+    private var activationObserver: NSObjectProtocol?
+    private var observedExpectedActivation: Bool
+    private var appWasReactivated = false
+
+    init(item: SwitcherItem,
+         restoresHiddenApp: Bool,
+         usesSpaceHop: Bool,
+         leavesFullscreen: Bool = false,
+         observesCloseResult: Bool,
+         closeWasRequested: Bool = false,
+         generation: UInt64,
+         foregroundPID: pid_t?,
+         foregroundWindowID: CGWindowID?,
+         completion: @escaping (Bool) -> Void) {
+        self.item = item
+        self.restoresHiddenApp = restoresHiddenApp
+        self.usesSpaceHop = usesSpaceHop
+        self.leavesFullscreen = leavesFullscreen
+        self.observesCloseResult = observesCloseResult
+        self.closeWasRequested = closeWasRequested
+        self.closeResultDeadline = closeWasRequested ? .now() + Self.closeResultGrace : nil
+        self.generation = generation
+        self.foregroundPID = foregroundPID
+        self.foregroundWindowID = foregroundWindowID
+        self.completion = completion
+        self.deadline = .now() + Self.timeout
+        self.observedExpectedActivation = !usesSpaceHop
+    }
+
+    func start() {
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication else { return }
+            let pid = app.processIdentifier
+            if pid != self.foregroundPID, pid != self.item.pid,
+               pid != ProcessInfo.processInfo.processIdentifier {
+                self.focusWasSuperseded = true
+            }
+            guard pid == self.item.pid else { return }
+            if self.observedExpectedActivation {
+                self.appWasReactivated = true
+            } else {
+                self.observedExpectedActivation = true
+            }
+        }
+        if usesSpaceHop {
+            WindowActivator.activate(item, retry: false)
+            generation = WindowActivator.currentActivationGeneration()
+        } else if restoresHiddenApp {
+            NSRunningApplication(processIdentifier: item.pid)?.unhide()
+        }
+        revealGeneration = WindowActivator.activationGeneration(for: item.pid)
+        poll()
+    }
+
+    func cancel() {
+        WindowActivator.finishPendingWindowClose(self, success: false)
+    }
+
+    func finish(success: Bool) {
+        guard !completed else { return }
+        completed = true
+        if let activationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
+            self.activationObserver = nil
+        }
+        if restoresHiddenApp, !closeWasRequested || windowWasClosed,
+           let revealGeneration,
+           SwitcherSupport.shouldRestoreHiddenApp(
+               revealGeneration: revealGeneration,
+               currentGeneration: WindowActivator.activationGeneration(for: item.pid),
+               appWasReactivated: appWasReactivated
+           ),
+           let app = NSRunningApplication(processIdentifier: item.pid),
+           !app.isTerminated,
+           usesSpaceHop || !app.isActive {
+            app.hide()
+        }
+        completion(success)
+    }
+
+    private func poll() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.pollInterval) { [weak self] in
+            guard let self, !self.completed, let windowID = self.item.windowID else { return }
+            if self.closeWasRequested {
+                if WindowActivator.windowExistsForClose(windowID: windowID, ownerPID: self.item.windowOwnerPID) == false {
+                    self.windowWasClosed = true
+                    WindowActivator.finishPendingWindowClose(self, success: true)
+                } else if let deadline = self.closeResultDeadline, DispatchTime.now() < deadline {
+                    self.poll()
+                } else {
+                    let canReveal = self.canRevealRemainingWindow()
+                    let finished = WindowActivator.finishPendingWindowClose(self, success: true)
+                    // Finish first: cancelling the old hop must not cancel the
+                    // new hop, and completion may supersede this request.
+                    if canReveal, finished, self.canRevealRemainingWindow() {
+                        WindowActivator.activate(self.item, retry: false)
+                    }
+                }
+                return
+            }
+            guard DispatchTime.now() < self.deadline else {
+                WindowActivator.finishPendingWindowClose(self, success: false)
+                return
+            }
+            // A window leaving fullscreen closes wherever it lands, once its
+            // close button is enabled again.
+            if self.leavesFullscreen || !SpaceWindowBridge.isParkedOnHiddenSpace(windowID),
+               WindowActivator.closeWindow(windowID: windowID,
+                                           appPID: self.item.pid,
+                                           windowOwnerPID: self.item.windowOwnerPID) {
+                self.closeWasRequested = true
+                if self.observesCloseResult {
+                    self.closeResultDeadline = .now() + Self.closeResultGrace
+                    self.poll()
+                } else {
+                    WindowActivator.finishPendingWindowClose(self, success: true)
+                }
+            } else {
+                self.poll()
+            }
+        }
+    }
+
+    private func canRevealRemainingWindow() -> Bool {
+        guard !focusWasSuperseded, !appWasReactivated, WindowActivator.isCurrentActivation(generation),
+              let foregroundPID, let foregroundWindowID,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == foregroundPID else { return false }
+        // Native selection of another window in the same app does not change
+        // our activation generation or send an app activation notification.
+        return WindowActivator.focusedWindowID(for: foregroundPID) == foregroundWindowID
+    }
+}
+
+private final class SwitcherAppActivationRetryState {
+    private let targetPID: pid_t
+    private var workspaceObserver: Any?
+    private(set) var targetWasObservedFrontmost: Bool
+    private(set) var isActive = true
+
+    init(targetPID: pid_t) {
+        self.targetPID = targetPID
+        targetWasObservedFrontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier == targetPID
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication else { return }
+            self?.observe(frontmostPID: app.processIdentifier)
+        }
+    }
+
+    func observe(frontmostPID: pid_t?) {
+        if frontmostPID == targetPID {
+            targetWasObservedFrontmost = true
+        }
+    }
+
+    func invalidate() {
+        guard isActive else { return }
+        isActive = false
+        if let workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
+        }
+        workspaceObserver = nil
+    }
+
+    deinit {
+        invalidate()
+    }
+}
+
+fileprivate final class SwitcherWindowMinimizeRestore {
+    let windowID: CGWindowID
+    let targetPID: pid_t
+    let targetWindowOwnerPID: pid_t
+    let sourcePID: pid_t
+    let sourceWindowID: CGWindowID?
+    let sourceWindowOwnerPID: pid_t?
+
+    private var observer: AXObserver?
+    private var observedWindow: AXUIElement?
+    private var observedTargetApp: AXUIElement?
+    private var observedMinimizeButton: AXUIElement?
+    private var workspaceObserver: Any?
+    fileprivate var minimizeIntentObserved = false
+    private var minimizeCompletionRestoreScheduled = false
+    private let targetBundleIdentifier: String?
+    private let sourceBundleIdentifier: String?
+
+    init?(windowID: CGWindowID,
+          targetPID: pid_t,
+          targetWindowOwnerPID: pid_t,
+          sourcePID: pid_t,
+          sourceWindowID: CGWindowID?,
+          sourceWindowOwnerPID: pid_t?) {
+        guard Permissions.shared.accessibility else { return nil }
+
+        let axApp = AXUIElementCreateApplication(targetWindowOwnerPID)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        guard let axWindow = WindowActivator.axElementForMinimizeRestore(windowID: windowID, in: axApp) else {
+            return nil
+        }
+
+        var observerRef: AXObserver?
+        guard AXObserverCreate(targetWindowOwnerPID,
+                               switcherWindowMinimizeRestoreCallback,
+                               &observerRef) == .success,
+              let observer = observerRef else { return nil }
+
+        self.windowID = windowID
+        self.targetPID = targetPID
+        self.targetWindowOwnerPID = targetWindowOwnerPID
+        self.sourcePID = sourcePID
+        self.sourceWindowID = sourceWindowID
+        self.sourceWindowOwnerPID = sourceWindowOwnerPID
+        self.observer = observer
+        self.observedWindow = axWindow
+        self.targetBundleIdentifier = NSRunningApplication(processIdentifier: targetPID)?.bundleIdentifier
+        self.sourceBundleIdentifier = NSRunningApplication(processIdentifier: sourcePID)?.bundleIdentifier
+
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        guard AXObserverAddNotification(observer,
+                                        axWindow,
+                                        kAXWindowMiniaturizedNotification as CFString,
+                                        refcon) == .success else {
+            self.observer = nil
+            self.observedWindow = nil
+            return nil
+        }
+
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+        if AXObserverAddNotification(observer,
+                                     axApp,
+                                     kAXFocusedWindowChangedNotification as CFString,
+                                     refcon) == .success {
+            observedTargetApp = axApp
+        }
+        if AXObserverAddNotification(observer,
+                                     axApp,
+                                     kAXMainWindowChangedNotification as CFString,
+                                     refcon) == .success {
+            observedTargetApp = axApp
+        }
+        if let minimizeButton = WindowActivator.elementAttribute(axWindow, kAXMinimizeButtonAttribute as String),
+           AXObserverAddNotification(observer,
+                                     minimizeButton,
+                                     switcherAXPressedNotification as CFString,
+                                     refcon) == .success {
+            observedMinimizeButton = minimizeButton
+        }
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            self?.handleAppActivation(notification)
+        }
+    }
+
+    func invalidate() {
+        if let workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
+        }
+        workspaceObserver = nil
+
+        if let observer {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+            if let observedWindow {
+                AXObserverRemoveNotification(observer,
+                                             observedWindow,
+                                             kAXWindowMiniaturizedNotification as CFString)
+            }
+            if let observedTargetApp {
+                AXObserverRemoveNotification(observer,
+                                             observedTargetApp,
+                                             kAXFocusedWindowChangedNotification as CFString)
+                AXObserverRemoveNotification(observer,
+                                             observedTargetApp,
+                                             kAXMainWindowChangedNotification as CFString)
+            }
+            if let observedMinimizeButton {
+                AXObserverRemoveNotification(observer,
+                                             observedMinimizeButton,
+                                             switcherAXPressedNotification as CFString)
+            }
+        }
+        observer = nil
+        observedWindow = nil
+        observedTargetApp = nil
+        observedMinimizeButton = nil
+    }
+
+    func handle(notification: String) {
+        if notification == (kAXWindowMiniaturizedNotification as String) {
+            minimizeIntentObserved = true
+            scheduleMinimizeCompletionRestore()
+        } else if notification == switcherAXPressedNotification {
+            minimizeIntentObserved = true
+            scheduleMinimizeIntentRestore()
+        } else if notification == (kAXFocusedWindowChangedNotification as String)
+                    || notification == (kAXMainWindowChangedNotification as String) {
+            guard minimizeIntentObserved else { return }
+            WindowActivator.restoreSourceAfterTargetMinimizeIntent(self)
+        }
+    }
+
+    private func scheduleMinimizeIntentRestore() {
+        scheduleRestorePulses(delays: [0.0, 0.01, 0.03, 0.06, 0.1, 0.16]
+                              + denseRestoreDelays(from: 0.24, through: 1.0, step: 0.04),
+                              completionDelay: 1.12)
+    }
+
+    private func scheduleMinimizeCompletionRestore() {
+        guard !minimizeCompletionRestoreScheduled else { return }
+        minimizeCompletionRestoreScheduled = true
+        scheduleRestorePulses(delays: denseRestoreDelays(from: 0.0, through: 0.45, step: 0.003),
+                              completionDelay: 0.5)
+    }
+
+    private func scheduleRestorePulses(delays: [TimeInterval], completionDelay: TimeInterval) {
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.minimizeIntentObserved else { return }
+                WindowActivator.restoreSourceAfterTargetMinimizeIntent(self,
+                                                                       keepPending: true,
+                                                                       allowSystemPromotion: true)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + completionDelay) { [weak self] in
+            guard let self, self.minimizeIntentObserved else { return }
+            WindowActivator.restoreSourceAfterTargetMinimizeIntent(self,
+                                                                   allowSystemPromotion: true)
+            WindowActivator.cancelPendingMinimizeRestore(self)
+        }
+    }
+
+    private func denseRestoreDelays(from start: TimeInterval,
+                                    through end: TimeInterval,
+                                    step: TimeInterval) -> [TimeInterval] {
+        guard step > 0, end >= start else { return [] }
+        var delays: [TimeInterval] = []
+        var delay = start
+        while delay <= end + 0.0001 {
+            delays.append(delay)
+            delay += step
+        }
+        return delays
+    }
+
+    fileprivate func matchesTargetBundle(_ pid: pid_t?) -> Bool {
+        guard let pid,
+              pid != targetPID,
+              pid != sourcePID,
+              let targetBundleIdentifier,
+              targetBundleIdentifier != sourceBundleIdentifier else { return false }
+        return NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == targetBundleIdentifier
+    }
+
+    fileprivate func matchesTargetBundle(_ app: NSRunningApplication) -> Bool {
+        guard app.processIdentifier != targetPID,
+              app.processIdentifier != sourcePID,
+              let targetBundleIdentifier,
+              targetBundleIdentifier != sourceBundleIdentifier else { return false }
+        return app.bundleIdentifier == targetBundleIdentifier
+    }
+
+    fileprivate func restoreAfterTargetBundleActivation() {
+        guard minimizeIntentObserved else { return }
+        WindowActivator.restoreSourceAfterTargetMinimizeIntent(self,
+                                                               keepPending: true,
+                                                               allowSystemPromotion: true)
+    }
+
+    private func handleAppActivation(_ notification: Notification) {
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
+            return
+        }
+        if minimizeIntentObserved {
+            WindowActivator.restoreSourceAfterTargetMinimizeIntent(self,
+                                                                   keepPending: true,
+                                                                   allowSystemPromotion: true)
+            return
+        }
+        let activatedMatchesTargetBundle = app.processIdentifier == targetWindowOwnerPID
+            || matchesTargetBundle(app)
+        guard !SwitcherSupport.shouldKeepMinimizeRestoreObserver(targetPID: targetPID,
+                                                                 sourcePID: sourcePID,
+                                                                 activatedPID: app.processIdentifier,
+                                                                 activatedMatchesTargetBundle: activatedMatchesTargetBundle) else {
+            if activatedMatchesTargetBundle {
+                restoreAfterTargetBundleActivation()
+            }
+            return
+        }
+        WindowActivator.cancelPendingMinimizeRestore()
+    }
+
+    deinit {
+        invalidate()
+    }
+}
+
+private func switcherWindowMinimizeRestoreCallback(_ observer: AXObserver,
+                                                   _ element: AXUIElement,
+                                                   _ notification: CFString,
+                                                   _ refcon: UnsafeMutableRawPointer?) {
+    guard let refcon else { return }
+    let restore = Unmanaged<SwitcherWindowMinimizeRestore>.fromOpaque(refcon).takeUnretainedValue()
+    restore.handle(notification: notification as String)
+}

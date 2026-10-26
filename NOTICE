@@ -1,0 +1,39 @@
+SasNotch
+Copyright (C) 2026 SasNotch contributors
+
+SasNotch is free software released under the GNU General Public License,
+version 3 or (at your option) any later version. See LICENSE for the full text.
+
+SasNotch is a derivative work. It is built on the source code of the
+following GPL-licensed projects, whose copyright notices are kept in the files
+that came from them. Every file taken from them carries a "Modified for
+SasNotch" line stating that it was changed.
+
+  Vorssaint (vorssaint-utils)
+    https://github.com/vorssaint/vorssaint-utils
+    Copyright (C) 2026 Vorssaint
+    License: GPL-3.0-or-later
+    SasNotch started from commit 746239b0220571d6694ffacae79f3eb9dcd09193.
+    The Vorssaint name, logo, icon and other branding are not used by
+    SasNotch and are not covered by the license grant above.
+
+  Atoll (DynamicIsland)
+    https://github.com/Ebullioscopic/Atoll
+    Copyright (C) 2024-2026 Atoll Contributors
+    License: GPL-3.0-or-later
+    Features were ported from commit c0676932d37889a64a95673fe39b352144266713.
+    Atoll and DynamicIsland are trademarks of their respective owners and are
+    not used to name or brand SasNotch.
+
+  boring.notch
+    https://github.com/TheBoredTeam/boring.notch
+    Copyright (C) TheBoredTeam and contributors
+    License: GPL-3.0
+    Atoll includes software derived from boring.notch, so the parts of
+    SasNotch ported from Atoll do too.
+
+SasNotch is not affiliated with or endorsed by Vorssaint, Atoll,
+TheBoredTeam or Apple. "Dynamic Island" is used descriptively.
+
+The SasNotch sasquatch icon (Branding/) was drawn for this project and is
+released under the same GPL-3.0-or-later license as the code.

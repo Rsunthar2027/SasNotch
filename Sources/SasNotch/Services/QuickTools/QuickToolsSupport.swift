@@ -1,0 +1,215 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Vorssaint
+// Modified for SasNotch by SasNotch contributors, 2026
+
+import AppKit
+import UniformTypeIdentifiers
+
+enum QuickToolsSupport {
+    static func sampledColor(in image: CGImage, x: Int, y: Int) -> NSColor? {
+        guard let pixel = image.cropping(to: CGRect(x: x, y: y, width: 1, height: 1))
+        else { return nil }
+        let bitmap = NSBitmapImageRep(cgImage: pixel)
+        guard let color = bitmap.colorAt(x: 0, y: 0) else { return nil }
+        // colorAt returns the pixel's components tagged as a generic color
+        // space. Preserve the bitmap's profile before converting to sRGB.
+        var components = [CGFloat](repeating: 0, count: color.numberOfComponents)
+        color.getComponents(&components)
+        guard components.count == bitmap.colorSpace.numberOfColorComponents + 1
+        else { return nil }
+        return NSColor(colorSpace: bitmap.colorSpace,
+                       components: components,
+                       count: components.count)
+    }
+
+    // MARK: - Quick launcher
+
+    enum GridDirection {
+        case up, down, left, right
+    }
+
+    /// Which way a grid fills: row by row with a fixed column count, or
+    /// column by column with a fixed row count, as a rail in the island does.
+    enum GridFlow: Equatable {
+        case rows(columns: Int)
+        case columns(rows: Int)
+    }
+
+    /// Keyboard navigation over a row-major grid: arrows move by one cell,
+    /// clamped to the existing items (no wrapping, so the selection never
+    /// jumps surprisingly from one edge to the other).
+    static func gridIndex(after index: Int,
+                          count: Int,
+                          columns: Int,
+                          direction: GridDirection) -> Int {
+        guard count > 0, columns > 0 else { return 0 }
+        let current = min(max(index, 0), count - 1)
+        let candidate: Int
+        switch direction {
+        case .left: candidate = current - 1
+        case .right: candidate = current + 1
+        case .up: candidate = current - columns
+        case .down: candidate = current + columns
+        }
+        guard candidate >= 0, candidate < count else { return current }
+        if direction == .left, current % columns == 0 { return current }
+        if direction == .right, current % columns == columns - 1 { return current }
+        return candidate
+    }
+
+    /// A column-major rail is the row-major walk with the axes swapped.
+    static func gridIndex(after index: Int, count: Int, flow: GridFlow, direction: GridDirection) -> Int {
+        switch flow {
+        case .rows(let columns):
+            return gridIndex(after: index, count: count, columns: columns, direction: direction)
+        case .columns(let rows):
+            let transposed: GridDirection
+            switch direction {
+            case .up: transposed = .left
+            case .down: transposed = .right
+            case .left: transposed = .up
+            case .right: transposed = .down
+            }
+            return gridIndex(after: index, count: count, columns: max(1, rows), direction: transposed)
+        }
+    }
+
+    /// The launcher's hidden-item set travels as a comma-joined string.
+    static func hiddenIDs(from raw: String) -> Set<String> {
+        Set(raw.split(separator: ",").map(String.init).filter { !$0.isEmpty })
+    }
+
+    static func serializeHiddenIDs(_ ids: Set<String>) -> String {
+        ids.sorted().joined(separator: ",")
+    }
+
+    /// One recognized line of screen text with its normalized position
+    /// (bottom-left origin, as Vision reports it).
+    struct RecognizedLine {
+        let text: String
+        let x: Double
+        let y: Double
+    }
+
+    /// Joins recognized lines in natural reading order: top to bottom, left
+    /// to right within the same visual row. Empty lines are dropped.
+    static func joinedRecognizedText(_ lines: [RecognizedLine],
+                                     removingLineBreaks: Bool) -> String {
+        let texts = lines
+            .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .sorted {
+                // Vision's y grows upward; bucket rows so tiny baseline
+                // wobbles don't shuffle words of the same line.
+                let rowA = (1 - $0.y) * 50
+                let rowB = (1 - $1.y) * 50
+                if abs(rowA - rowB) >= 0.5 { return rowA < rowB }
+                return $0.x < $1.x
+            }
+            .map(\.text)
+        guard removingLineBreaks else { return texts.joined(separator: "\n") }
+
+        let normalizedTexts = texts.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return normalizedTexts.reduce(into: "") { joined, line in
+            guard !joined.isEmpty else {
+                joined = line
+                return
+            }
+            let joinsTightly = joined.unicodeScalars.last.map(isTightScriptScalar) == true
+                && line.unicodeScalars.first.map(isTightScriptScalar) == true
+            joined.append(joinsTightly ? "" : " ")
+            joined.append(line)
+        }
+    }
+
+    // CJK punctuation, kana, Han. Hangul syllables and halfwidth Hangul jamo
+    // stay out on purpose because Korean keeps its word spaces.
+    private static func isTightScriptScalar(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x3000...0x312F,
+             0x3190...0x9FFF,
+             0xF900...0xFAFF,
+             0xFF01...0xFF9F,
+             0x20000...0x2FA1F:
+            return true
+        default:
+            return false
+        }
+    }
+
+    // MARK: - QR codes
+
+    /// One decoded 2D code with its normalized position (bottom-left origin,
+    /// as Vision reports it) so several codes join in reading order.
+    struct DecodedBarcode {
+        let payload: String
+        let x: Double
+        let y: Double
+    }
+
+    /// Joins decoded codes in natural reading order (top to bottom, left to
+    /// right), dropping empty payloads. Several codes are newline separated.
+    static func joinedBarcodePayloads(_ codes: [DecodedBarcode]) -> String {
+        codes
+            .filter { !$0.payload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .sorted {
+                let rowA = (1 - $0.y) * 50
+                let rowB = (1 - $1.y) * 50
+                if abs(rowA - rowB) >= 0.5 { return rowA < rowB }
+                return $0.x < $1.x
+            }
+            .map(\.payload)
+            .joined(separator: "\n")
+    }
+
+    // MARK: - Paste as plain text
+
+    /// Whether a menu item is an app's own matching-style paste, judged by its
+    /// key equivalent instead of its localized title. The universal
+    /// convention is ⌥⇧⌘V; in the AX menu attributes that is command
+    /// character "V" with the shift (1) and option (2) bits set and nothing
+    /// else (0 alone means a plain ⌘ equivalent). ⇧⌘V and ⌃ variants are
+    /// deliberately out: in several apps those are different edit commands,
+    /// and pressing one would touch the document (issue #349).
+    static func isMatchStyleEquivalent(commandCharacter: String?,
+                                       modifierMask: UInt32?,
+                                       isEnabled: Bool) -> Bool {
+        let shiftAndOption: UInt32 = 1 | 2
+        return commandCharacter?.uppercased() == "V"
+            && modifierMask == shiftAndOption
+            && isEnabled
+    }
+
+    /// The text a picture or clip copied on its own carries beside it: nothing,
+    /// or one link or media file name, as a browser or a chat copies an image.
+    /// Anything else, a cell's "example.com" or "2.4GHz" included, is text
+    /// that came with a picture of itself and still pastes plain.
+    static func isMediaTextFallback(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        guard !trimmed.contains(where: { $0.isWhitespace }) else { return false }
+        let lowercased = trimmed.lowercased()
+        if lowercased.hasPrefix("data:") || lowercased.hasPrefix("blob:")
+            || (trimmed.contains("://") && URL(string: trimmed)?.scheme != nil) { return true }
+        let name = trimmed as NSString
+        guard !name.deletingPathExtension.isEmpty, !name.pathExtension.isEmpty,
+              let type = UTType(filenameExtension: name.pathExtension.lowercased()) else { return false }
+        return type.conforms(to: .image) || type.conforms(to: .audiovisualContent) || type.conforms(to: .pdf)
+    }
+
+    /// The payload as a web link for the optional open action. Limited to
+    /// http and https on purpose: a scanned code must never be able to launch
+    /// an arbitrary URL scheme (mailto, tel, custom app schemes and so on).
+    static func openableURL(from payload: String) -> URL? {
+        let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.contains(where: { $0.isWhitespace }),
+              let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = url.host, !host.isEmpty
+        else { return nil }
+        return url
+    }
+}

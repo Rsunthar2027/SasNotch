@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SasNotch app icon: a flat, friendly sasquatch. SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="tile">
+      <rect x="100" y="100" width="824" height="824" rx="185"/>
+    </clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#F3E7D3"/>
+  <path clip-path="url(#tile)" fill="#5B3A22" d="M 110 960 C 115 810 160 720 250 676 C 290 656 318 632 338 604 C 332 590 328 578 322 560 C 340 570 352 576 362 580 C 316 470 346 306 492 292 L 506 258 L 530 292 C 678 306 708 470 662 580 C 672 576 684 570 702 560 C 696 578 692 590 686 604 C 706 632 734 656 774 676 C 864 720 909 810 914 960 Z"/>
+  <path fill="#F3E7D3" d="M 398 474 C 440 462 486 470 512 494 C 538 470 584 462 626 474 C 644 560 604 654 512 660 C 420 654 380 560 398 474 Z"/>
+  <g fill="#5B3A22">
+    <circle cx="462" cy="530" r="22"/>
+    <circle cx="562" cy="530" r="22"/>
+    <ellipse cx="512" cy="582" rx="40" ry="20"/>
+  </g>
+  <path d="M 474 620 Q 512 644 550 620" fill="none" stroke="#5B3A22" stroke-width="16" stroke-linecap="round"/>
+</svg>
