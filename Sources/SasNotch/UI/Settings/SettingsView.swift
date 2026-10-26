@@ -607,7 +607,7 @@ struct SettingsView: View {
         case .advanced: AdvancedSettings()
         case .about: AboutSettings()
         case .releaseNotes: ReleaseNotesSettings()
-        case .support: SupportSettings()
+        case .support: AboutSettings()
         }
     }
 }
@@ -730,6 +730,10 @@ struct AboutSettings: View {
                 aboutContent
             }
 
+            Section(AboutCredits.title) {
+                AboutCreditsView()
+            }
+
             UpdatesView()
         }
         .formStyle(.grouped)
@@ -771,9 +775,6 @@ struct AboutSettings: View {
                 Button(l10n.s.reviewIntro) {
                     appDelegate()?.showOnboarding()
                 }
-                Button(l10n.s.reviewHighlights) {
-                    appDelegate()?.showUpdateHighlights(isReview: true)
-                }
                 Link(l10n.s.viewOnGitHub, destination: AppInfo.repositoryURL)
             }
             Text(AppInfo.copyright)
@@ -782,6 +783,48 @@ struct AboutSettings: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
+    }
+}
+
+/// Credits for the GPL projects SasNotch is derived from. Kept in English:
+/// project names and license terms read the same in every language.
+enum AboutCredits {
+    static let title = "Credits"
+    static let intro = "SasNotch is a derivative work. It is built on, and inspired by, these open-source projects, all licensed under the GNU GPL v3. Their copyright notices are kept in the source code."
+    static let disclaimer = "SasNotch is an independent project and is not affiliated with or endorsed by them."
+    static let projects: [(name: String, role: String, url: URL)] = [
+        ("Vorssaint", "The utilities and the Dynamic Island SasNotch started from", AppInfo.vorssaintURL),
+        ("Atoll", "Focus, privacy, battery and lock screen features", AppInfo.atollURL),
+        ("Boring.Notch", "The notch app Atoll is built on", AppInfo.boringNotchURL),
+    ]
+}
+
+struct AboutCreditsView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(AboutCredits.intro)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(AboutCredits.projects, id: \.name) { project in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Link(project.name, destination: project.url)
+                        .font(.callout.weight(.semibold))
+                    Text(project.role)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 12) {
+                Text(AboutCredits.disclaimer)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Spacer(minLength: 0)
+                Link("GPL-3.0", destination: AppInfo.licenseURL)
+                    .font(.caption)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -916,96 +959,6 @@ struct ReleaseNotesSettings: View {
         case "changed": return "slider.horizontal.3"
         case "fixed": return "checkmark.circle.fill"
         default: return "circle.fill"
-        }
-    }
-}
-
-// MARK: - Support
-
-struct SupportSettings: View {
-    @ObservedObject private var l10n = L10n.shared
-    @Environment(\.openURL) private var openURL
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var donateThanksText: String {
-        let thanks = l10n.s.donateThanks
-        return colorScheme == .dark
-            ? thanks.replacingOccurrences(of: "🖤", with: "🤍")
-            : thanks
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 18) {
-                ZStack {
-                    Circle()
-                        .fill(Theme.spaceGradient)
-                        .frame(width: 78, height: 78)
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 29, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-
-                VStack(spacing: 7) {
-                    Text(l10n.s.donateHeading)
-                        .font(.title2.bold())
-                        .multilineTextAlignment(.center)
-                    Text(l10n.s.donateMessage)
-                        .font(.system(size: 13.5))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 460)
-                }
-
-                Button {
-                    openURL(AppInfo.coffeeURL)
-                } label: {
-                    Label(l10n.s.donateButton, systemImage: "cup.and.saucer.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-
-                HStack(alignment: .top, spacing: 14) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.yellow)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(Color.yellow.opacity(0.14)))
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(l10n.s.supportIntroStarMessage)
-                            .font(.system(size: 13.5, weight: .medium))
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Button {
-                            openURL(AppInfo.repositoryURL)
-                        } label: {
-                            Label(l10n.s.supportIntroStarButton, systemImage: "star.fill")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(16)
-                .frame(maxWidth: 510)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45))
-                )
-
-                Text(donateThanksText)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 28)
-            .padding(.vertical, 26)
         }
     }
 }

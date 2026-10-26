@@ -9,7 +9,7 @@ import Foundation
 /// day while the AI section is on and the person keeps prices up to date. The
 /// request carries no usage and nothing from this Mac.
 enum AgentPriceSource {
-    static let remote = URL(string: "https://raw.githubusercontent.com/vorssaint/vorssaint-utils/main/Resources/agent-prices.json")!
+    static let remote = URL(string: "https://raw.githubusercontent.com/\(AppInfo.githubRepository)/main/Resources/agent-prices.json")!
     static let refreshInterval: TimeInterval = 86_400
     /// After a failed download, the next attempt waits this long.
     static let retryInterval: TimeInterval = 6 * 3_600

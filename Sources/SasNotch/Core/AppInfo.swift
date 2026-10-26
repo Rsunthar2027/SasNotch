@@ -7,12 +7,21 @@ import Foundation
 /// Static identity of the app, shared by UI, notifications and tooling.
 enum AppInfo {
     static let name = "SasNotch"
-    static let copyright = "© 2026 SasNotch"
-    static let websiteURL = URL(string: "https://vorssaint.com")!
-    static let repositoryURL = URL(string: "https://github.com/vorssaint/vorssaint-utils")!
-    static let coffeeURL = URL(string: "https://buymeacoffee.com/vorssaint")!
-    static let discordURL = URL(string: "https://discord.gg/M6BwWH4BJp")!
-    static let socialURL = URL(string: "https://x.com/vorssaint")!
+    static let copyright = "© 2026 SasNotch contributors"
+    /// The GitHub repository SasNotch is published from, as "owner/name".
+    static let githubRepository = "OWNER/SasNotch"
+    static let repositoryURL = URL(string: "https://github.com/\(githubRepository)")!
+    static let issuesURL = URL(string: "https://github.com/\(githubRepository)/issues")!
+    static let licenseURL = URL(string: "https://github.com/\(githubRepository)/blob/main/LICENSE")!
+
+    /// The GPL projects SasNotch is derived from and inspired by, credited in About.
+    static let vorssaintURL = URL(string: "https://github.com/vorssaint/vorssaint-utils")!
+    static let atollURL = URL(string: "https://github.com/Ebullioscopic/Atoll")!
+    static let boringNotchURL = URL(string: "https://github.com/TheBoredTeam/boring.notch")!
+
+    /// SasNotch runs no server of its own, so features that upload to one,
+    /// such as expiring screenshot and recording links, stay switched off.
+    static let hostedSharingAvailable = false
 
     /// The bundle version. The fallback only applies to the bare binary
     /// (e.g. `--selftest`), never the shipped app, which reads its Info.plist.

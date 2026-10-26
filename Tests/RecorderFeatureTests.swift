@@ -50,8 +50,8 @@ enum RecorderFeatureTests {
                "a recording carries the sound of the Mac unless the person turns it off")
         suite.expect(Defaults.registeredDefaults[DefaultsKey.recorderMicrophone] as? Bool == false,
                "microphone recording is optional and ships off")
-        suite.expect(Defaults.registeredDefaults[DefaultsKey.recorderSharingEnabled] as? Bool == true,
-               "temporary recording links stay visible but do nothing until explicitly used")
+        suite.expect(Defaults.registeredDefaults[DefaultsKey.recorderSharingEnabled] as? Bool == false,
+               "temporary recording links ship off: SasNotch hosts no link service")
         suite.expect(Defaults.registeredDefaults[DefaultsKey.recorderQuality] as? String == "balanced"
                 && Defaults.registeredDefaults[DefaultsKey.recorderFrameRate] as? Int == 60
                 && Defaults.registeredDefaults[DefaultsKey.recorderCountdown] as? Int == 3

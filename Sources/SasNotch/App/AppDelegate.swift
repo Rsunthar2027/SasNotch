@@ -2189,14 +2189,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     /// Beta updates only introduce their new feature; other update surfaces
     /// retain their own release gates.
+    /// SasNotch shows What's New from its own changelog after an update. The
+    /// upstream tours, showcase videos and support invitations described
+    /// another app's releases, so they are not presented.
     private func presentUpdateIntros() {
-        if showWhatsNewIfNeeded() { return }
-        if showUpdateHighlightsIfNeeded() { return }
-        if !AppInfo.isBeta {
-            if showSupportUpdateIntroIfNeeded() { return }
-            if showUpdateShowcaseIntroIfNeeded() { return }
-        }
-        showBrightnessUpdatePromptIfNeeded()
+        _ = showWhatsNewIfNeeded()
     }
 
     private func brightnessSetupNeeded() -> Bool {
@@ -2758,18 +2755,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             let isReview = whatsNewIsReview
             whatsNewIsReview = false
             guard !isTerminating else { return }
-            if isReview {
-                DispatchQueue.main.async { [weak self] in self?.showSupportUpdateIntro(isReview: true) }
-                return
-            }
+            if isReview { return }
             markWhatsNewSeen()
             // Done, Escape and the window's close button all arrive here.
-            // The stable invitation follows the changelog before older tours.
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                if !AppInfo.isBeta, self.showSupportUpdateIntroIfNeeded() { return }
-                self.presentUpdateIntros()
-            }
+            DispatchQueue.main.async { [weak self] in self?.presentUpdateIntros() }
             return
         }
         if window === updatePreviewWindow {

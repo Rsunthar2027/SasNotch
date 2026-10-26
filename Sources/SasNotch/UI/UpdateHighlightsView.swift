@@ -12,9 +12,8 @@ struct UpdateHighlightsView: View {
     let onFinish: () -> Void
 
     private var text: NotchTourStrings { FeatureStrings.notchTour(l10n.language) }
-    private var animationURL: URL? {
-        Bundle.main.url(forResource: "highlights-notch", withExtension: "gif", subdirectory: "Gifs")
-    }
+    /// The upstream tour animation is not shipped; the view shows its symbol.
+    private var animationURL: URL? { nil }
 
     var body: some View {
         let size = UpdateHighlightsLayout.size(in: availableSize)

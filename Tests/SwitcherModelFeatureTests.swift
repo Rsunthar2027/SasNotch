@@ -2103,22 +2103,20 @@ enum SwitcherModelFeatureTests {
                && !SupportUpdateIntroInfo.shouldShow(appVersion: "3.4.2-beta.2", lastSeenVersion: nil)
                && !SupportUpdateIntroInfo.shouldShow(appVersion: "3.5.0", lastSeenVersion: nil),
                "support prompt never leaks into another release or a beta")
-        suite.expect(AppInfo.discordURL.absoluteString == "https://discord.gg/M6BwWH4BJp",
-               "the community action uses the permanent Discord invitation")
-        suite.expect(AppInfo.coffeeURL.absoluteString == "https://buymeacoffee.com/vorssaint",
-               "financial support uses Buy Me a Coffee")
-        suite.expect(AppInfo.socialURL.absoluteString == "https://x.com/vorssaint",
-               "social previews keep the official X profile")
+        suite.expect(AppInfo.repositoryURL.absoluteString == "https://github.com/\(AppInfo.githubRepository)",
+               "project links point at the SasNotch repository")
+        suite.expect(!AppInfo.hostedSharingAvailable,
+               "SasNotch runs no link-sharing server, so uploads stay off")
         // AppInfo.version falls back to "dev" in this bare harness, so read
         // the plist the shipped app will actually carry. The pin is a
         // per-release decision: this check fails on every version bump so the
         // decision above is made consciously, never by omission.
         let releasePlist = NSDictionary(contentsOfFile: "Resources/Info.plist")
         let plistVersion = (releasePlist?["CFBundleShortVersionString"] as? String) ?? ""
-        suite.expect(plistVersion == "3.4.2",
-               "bumping the app version requires re-deciding the support prompt pin above")
+        suite.expect(plistVersion == "1.0.0",
+               "bumping the app version is a conscious per-release decision")
         let plistBuild = (releasePlist?["CFBundleVersion"] as? String) ?? ""
-        suite.expect(plistBuild == "104",
+        suite.expect(plistBuild == "1",
                "every app version needs its own incremented bundle build")
         suite.expect(SupportUpdateIntroInfo.releaseVersion == "3.4.2",
                "the support prompt is prepared for the 3.4.2 stable release")
@@ -2156,10 +2154,8 @@ enum SwitcherModelFeatureTests {
                    && !SupportUpdateIntroInfo.shouldShow(appVersion: version, lastSeenVersion: SupportUpdateIntroInfo.seenVersion),
                    "all stable patches share completion markers and never repeat completed introductions")
         }
-        let tourGIF = URL(fileURLWithPath: "Resources/Gifs/highlights-notch.gif")
-        let tourFrames = CGImageSourceCreateWithURL(tourGIF as CFURL, nil).map(CGImageSourceGetCount)
-        suite.expect(tourFrames.map { $0 > 1 } == true,
-               "the Dynamic Island tour includes an animated GIF in the app resources")
+        suite.expect(!FileManager.default.fileExists(atPath: "Resources/Gifs/highlights-notch.gif"),
+               "the upstream tour animation, which shows another app, is not shipped")
         suite.expect(registeredDefaults[DefaultsKey.mixerLowerVolumeOnHeadphonesDisconnect] as? Bool == false,
                "headphone disconnect volume lowering is opt-in")
         suite.expect(registeredDefaults[DefaultsKey.mixerHeadphonesDisconnectVolumePercent] as? Int

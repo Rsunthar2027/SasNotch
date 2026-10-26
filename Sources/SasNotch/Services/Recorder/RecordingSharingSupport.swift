@@ -46,7 +46,9 @@ enum RecordingSharingSupport {
         let audioBitRate: Int
     }
 
-    static let productionEndpoint = URL(string: "https://screenshots.vorssaint.com")!
+    /// SasNotch hosts no link service (AppInfo.hostedSharingAvailable); the
+    /// reserved .invalid host keeps any stray request from leaving the Mac.
+    static let productionEndpoint = URL(string: "https://sharing.invalid")!
     static let developerBundleIdentifier = "com.sasnotch.app.dev"
     /// Leaves transport headroom below the public 100 MB request ceiling.
     static let maximumUploadBytes = 96_000_000

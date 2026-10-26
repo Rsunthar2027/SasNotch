@@ -224,7 +224,7 @@ func appDelegate() -> AppDelegate? {
     NSApp.delegate as? AppDelegate
 }
 
-/// The official mark (Resources/Brand/logo.png, trimmed at build time),
+/// The monochrome sasquatch mark (Branding/sasquatch-template.svg, rendered at build time),
 /// tintable for light or dark surfaces.
 struct BrandMark: View {
     var width: CGFloat
@@ -255,37 +255,16 @@ struct BrandMark: View {
     }
 }
 
-struct DiscordMark: View {
-    var width: CGFloat
-
-    private static let mark: NSImage? = {
-        guard let url = Bundle.main.url(forResource: "discord-symbol",
-                                        withExtension: "svg",
-                                        subdirectory: "Images") else { return nil }
-        return NSImage(contentsOf: url)
-    }()
-
-    var body: some View {
-        if let mark = Self.mark {
-            Image(nsImage: mark)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: width)
-        }
-    }
-}
-
-/// Squircle badge with the mark on the space gradient — the app's face in the
-/// About tab and onboarding.
+/// The sasquatch app icon — the app's face in the About tab and onboarding.
 struct BrandBadge: View {
     var size: CGFloat
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-                .fill(Theme.spaceGradient)
-            BrandMark(width: size * 0.8)
-        }
-        .frame(width: size, height: size)
+        Image(nsImage: NSApp.applicationIconImage)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }

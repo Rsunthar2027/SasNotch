@@ -24,7 +24,8 @@ struct ScreenRecordingCaptureSettings: View {
     @AppStorage(DefaultsKey.recorderGIFSize) private var gifSizeRaw =
         RecorderSupport.GIFSize.medium.rawValue
     @AppStorage(DefaultsKey.recorderGIFFrameRate) private var gifFrameRate = 12
-    @AppStorage(DefaultsKey.recorderSharingEnabled) private var sharingEnabled = true
+    @AppStorage(DefaultsKey.recorderSharingEnabled) private var sharingPreference = false
+    private var sharingEnabled: Bool { AppInfo.hostedSharingAvailable && sharingPreference }
     @State private var showsMoreOptions = false
     @State private var showingSharedLinks = false
     @State private var showingSharePrivacy = false
@@ -153,36 +154,39 @@ struct ScreenRecordingCaptureSettings: View {
                 }
             }
 
-            Section {
-                Toggle(screenshotStrings.shareEnabledToggle, isOn: $sharingEnabled)
-                if sharingEnabled {
-                    Text(shareStrings.caption)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Button {
-                    showingSharePrivacy = true
-                } label: {
-                    Label(screenshotStrings.sharePrivacyButton, systemImage: "hand.raised")
-                }
-                if !sharing.records.isEmpty {
-                    Button {
-                        showingSharedLinks = true
-                    } label: {
-                        HStack {
-                            Label(screenshotStrings.sharedLinksTitle, systemImage: "link")
-                            Spacer()
-                            Text("\(sharing.records.count)")
-                                .foregroundStyle(.secondary)
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
+            // Link sharing needs a hosted service SasNotch does not run.
+            if AppInfo.hostedSharingAvailable {
+                Section {
+                    Toggle(screenshotStrings.shareEnabledToggle, isOn: $sharingPreference)
+                    if sharingEnabled {
+                        Text(shareStrings.caption)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    Button {
+                        showingSharePrivacy = true
+                    } label: {
+                        Label(screenshotStrings.sharePrivacyButton, systemImage: "hand.raised")
+                    }
+                    if !sharing.records.isEmpty {
+                        Button {
+                            showingSharedLinks = true
+                        } label: {
+                            HStack {
+                                Label(screenshotStrings.sharedLinksTitle, systemImage: "link")
+                                Spacer()
+                                Text("\(sharing.records.count)")
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Text(screenshotStrings.shareSectionTitle)
                 }
-            } header: {
-                Text(screenshotStrings.shareSectionTitle)
             }
         }
         .onAppear { sharing.refresh() }

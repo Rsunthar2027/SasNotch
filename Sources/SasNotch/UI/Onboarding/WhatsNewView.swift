@@ -236,15 +236,6 @@ private struct UpdateSupportContent: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 Button {
-                    openURL(AppInfo.coffeeURL)
-                } label: {
-                    Label(l10n.s.supportIntroCoffeeButton,
-                          systemImage: "cup.and.saucer.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-
-                Button {
                     openURL(AppInfo.repositoryURL)
                 } label: {
                     Label(l10n.s.supportIntroStarHint, systemImage: "star")

@@ -82,7 +82,9 @@ enum ScreenshotSharingSupport {
         return true
     }
 
-    static let productionEndpoint = URL(string: "https://screenshots.vorssaint.com")!
+    /// SasNotch hosts no link service (AppInfo.hostedSharingAvailable); the
+    /// reserved .invalid host keeps any stray request from leaving the Mac.
+    static let productionEndpoint = URL(string: "https://sharing.invalid")!
     static let developerBundleIdentifier = "com.sasnotch.app.dev"
     static let maximumUploadBytes = 25 * 1_024 * 1_024
 

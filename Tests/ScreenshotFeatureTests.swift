@@ -3720,8 +3720,8 @@ enum ScreenshotFeatureTests {
                 && !capturesGoToShelf(option: true, installed: true, on: false)
                 && !capturesGoToShelf(option: true, installed: false, on: true),
                "captures go to the shelf only with the option on and the shelf installed and switched on")
-        suite.expect(Defaults.registeredDefaults[DefaultsKey.screenshotSharingEnabled] as? Bool == true,
-               "temporary screenshot links preserve their existing availability by default")
+        suite.expect(Defaults.registeredDefaults[DefaultsKey.screenshotSharingEnabled] as? Bool == false,
+               "temporary screenshot links ship off: SasNotch hosts no link service")
         suite.expect(Defaults.registeredDefaults[DefaultsKey.screenshotToolOrder] as? String
                 == ScreenshotSupport.Tool.defaultOrderStorage,
                "the screenshot rail ships in its useful numbered order")
