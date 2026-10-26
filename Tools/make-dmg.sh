@@ -126,8 +126,21 @@ elif (( STYLE_STATUS != 0 )); then
 fi
 
 sync
-hdiutil detach "$MOUNT" -quiet \
-    || hdiutil detach "$MOUNT" -force -quiet
+# Finder can hold the volume for a few seconds after closing its window,
+# which made a single detach fail the release with no message. Retry, and
+# say so if it never lets go.
+detached=0
+for attempt in {1..6}; do
+    if hdiutil detach "$MOUNT" -quiet 2>/dev/null; then detached=1; break; fi
+    sleep 2
+    if hdiutil detach "$MOUNT" -force -quiet 2>/dev/null; then detached=1; break; fi
+    echo "  volume still busy, retrying detach ($attempt of 6)…"
+    sleep 3
+done
+if (( ! detached )); then
+    echo "✗ Could not detach $MOUNT" >&2
+    exit 1
+fi
 MOUNT=""
 
 echo "▸ Compressing…"
