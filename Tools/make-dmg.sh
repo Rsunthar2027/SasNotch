@@ -48,6 +48,9 @@ codesign --verify --deep --strict "$STAGING/$APP_NAME.app"
 ln -s /Applications "$STAGING/Applications"
 mkdir "$STAGING/.background"
 cp build/dmg-background.png "$STAGING/.background/background.png"
+# Keep Spotlight off the image: indexing a freshly mounted volume holds it
+# busy and makes the detach below fail.
+touch "$STAGING/.metadata_never_index"
 
 echo "▸ Creating writable image…"
 WORK="$(mktemp -d)"
@@ -70,7 +73,7 @@ if [[ $created -ne 1 ]]; then
     echo "✗ Could not create the disk image after 3 attempts" >&2
     exit 1
 fi
-ATTACH_OUTPUT="$(hdiutil attach "$RW" -nobrowse)"
+ATTACH_OUTPUT="$(hdiutil attach "$RW" -nobrowse -noautoopen)"
 MOUNT="$(printf '%s\n' "$ATTACH_OUTPUT" | awk '/\/Volumes\// {print substr($0, index($0, "/Volumes/")); exit}')"
 if [[ -z "$MOUNT" || ! -d "$MOUNT" ]]; then
     echo "✗ Could not find mounted volume in hdiutil output" >&2
@@ -83,7 +86,7 @@ echo "▸ Arranging window (icons, arrow, background)…"
 # fails the release (the DMG is still valid, just unstyled that once).
 osascript <<APPLESCRIPT &
 tell application "Finder"
-    tell disk "$VOLUME"
+    tell disk "${MOUNT:t}"
         open
         set current view of container window to icon view
         set toolbar visible of container window to false
@@ -126,21 +129,34 @@ elif (( STYLE_STATUS != 0 )); then
 fi
 
 sync
-# Finder can hold the volume for a few seconds after closing its window,
-# which made a single detach fail the release with no message. Retry, and
-# say so if it never lets go.
+# Finder or Spotlight can hold the volume for a while after the window
+# closes, and a detach that reports failure may still finish a moment later.
+# So each attempt first checks whether the volume is still mounted, errors
+# are shown rather than hidden, and the last resort is a forced unmount.
+still_mounted() { /sbin/mount | grep -qF " on $MOUNT ("; }
+detach_errors="$(mktemp)"
 detached=0
 for attempt in {1..6}; do
-    if hdiutil detach "$MOUNT" -quiet 2>/dev/null; then detached=1; break; fi
+    if ! still_mounted; then detached=1; break; fi
+    if hdiutil detach "$MOUNT" 2>>"$detach_errors" >/dev/null; then detached=1; break; fi
     sleep 2
-    if hdiutil detach "$MOUNT" -force -quiet 2>/dev/null; then detached=1; break; fi
-    echo "  volume still busy, retrying detach ($attempt of 6)…"
+    if ! still_mounted; then detached=1; break; fi
+    if hdiutil detach "$MOUNT" -force 2>>"$detach_errors" >/dev/null; then detached=1; break; fi
+    echo "  volume still busy, retrying detach ($attempt of 6): $(tail -1 "$detach_errors")"
     sleep 3
 done
-if (( ! detached )); then
-    echo "✗ Could not detach $MOUNT" >&2
+if (( ! detached )) && still_mounted; then
+    diskutil unmount force "$MOUNT" >/dev/null 2>>"$detach_errors" && detached=1
+fi
+if (( ! detached )) && still_mounted; then
+    echo "✗ Could not detach $MOUNT:" >&2
+    cat "$detach_errors" >&2
+    echo "Processes using it:" >&2
+    lsof +f -- "$MOUNT" >&2 2>/dev/null || true
+    rm -f "$detach_errors"
     exit 1
 fi
+rm -f "$detach_errors"
 MOUNT=""
 
 echo "▸ Compressing…"
