@@ -86,6 +86,8 @@
 	<string>SasNotch organizes confirmed WhatsApp downloads in a destination folder you explicitly choose. The Cleaner also looks for forgotten screenshots when you save screenshots here.</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/Rsunthar2027/SasNotch/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>DMaVUNfW2ufnmCuzFj1W+fuATN80b0dF2fVqBWJy9LQ=</string>
 	<key>SUScheduledCheckInterval</key>

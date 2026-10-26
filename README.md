@@ -9,7 +9,7 @@
 **Install with one line** (paste into Terminal):
 
 ```sh
-curl -L https://github.com/OWNER/SasNotch/releases/latest/download/SasNotch.zip -o /tmp/SasNotch.zip && unzip -o /tmp/SasNotch.zip -d /Applications && open /Applications/SasNotch.app
+curl -L https://github.com/Rsunthar2027/SasNotch/releases/latest/download/SasNotch.zip -o /tmp/SasNotch.zip && unzip -o /tmp/SasNotch.zip -d /Applications && open /Applications/SasNotch.app
 ```
 
 Files that `curl` downloads are not quarantined, so macOS opens SasNotch without a Gatekeeper warning.
@@ -50,7 +50,7 @@ Use the command at the top of this page. It downloads the latest release, puts S
 
 ### From the browser
 
-1. Download **SasNotch.dmg** from the [latest release](https://github.com/OWNER/SasNotch/releases/latest).
+1. Download **SasNotch.dmg** from the [latest release](https://github.com/Rsunthar2027/SasNotch/releases/latest).
 2. Open it and drag SasNotch to Applications.
 3. Open SasNotch. macOS says it can't verify the developer, because SasNotch is signed with its own certificate rather than a paid Apple Developer ID.
 4. Open **System Settings › Privacy & Security**, scroll down to the message about SasNotch and click **Open Anyway**, then confirm.
@@ -108,7 +108,7 @@ Every release is signed with the same certificate, so the permissions you grant 
 3. To also remove its settings, caches, login item and granted permissions, run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/OWNER/SasNotch/main/Tools/uninstall.sh -o /tmp/sasnotch-uninstall.sh && zsh /tmp/sasnotch-uninstall.sh
+curl -fsSL https://raw.githubusercontent.com/Rsunthar2027/SasNotch/main/Tools/uninstall.sh -o /tmp/sasnotch-uninstall.sh && zsh /tmp/sasnotch-uninstall.sh
 ```
 
 ## Build from source
@@ -116,7 +116,7 @@ curl -fsSL https://raw.githubusercontent.com/OWNER/SasNotch/main/Tools/uninstall
 You need the Xcode Command Line Tools (`xcode-select --install`). Full Xcode is optional.
 
 ```sh
-git clone https://github.com/OWNER/SasNotch.git
+git clone https://github.com/Rsunthar2027/SasNotch.git
 cd SasNotch
 ./build.sh --dev --install
 ```

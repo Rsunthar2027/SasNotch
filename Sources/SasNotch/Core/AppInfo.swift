@@ -9,7 +9,7 @@ enum AppInfo {
     static let name = "SasNotch"
     static let copyright = "© 2026 SasNotch contributors"
     /// The GitHub repository SasNotch is published from, as "owner/name".
-    static let githubRepository = "OWNER/SasNotch"
+    static let githubRepository = "Rsunthar2027/SasNotch"
     static let repositoryURL = URL(string: "https://github.com/\(githubRepository)")!
     static let issuesURL = URL(string: "https://github.com/\(githubRepository)/issues")!
     static let licenseURL = URL(string: "https://github.com/\(githubRepository)/blob/main/LICENSE")!

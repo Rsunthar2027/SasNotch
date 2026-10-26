@@ -7,7 +7,7 @@ Thanks for helping. Bug reports, fixes, translations and feature ideas are all w
 You need an Apple Silicon Mac with macOS 14 or later and the Xcode Command Line Tools (`xcode-select --install`). A full Xcode install is optional.
 
 ```sh
-git clone https://github.com/OWNER/SasNotch.git
+git clone https://github.com/Rsunthar2027/SasNotch.git
 cd SasNotch
 ./build.sh --dev            # builds "SasNotch (Developer)" into build/stage.noindex
 ./build.sh --dev --install  # installs it in /Applications and opens it
