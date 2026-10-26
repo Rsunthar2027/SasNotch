@@ -75,6 +75,9 @@ if [[ $created -ne 1 ]]; then
 fi
 ATTACH_OUTPUT="$(hdiutil attach "$RW" -nobrowse -noautoopen)"
 MOUNT="$(printf '%s\n' "$ATTACH_OUTPUT" | awk '/\/Volumes\// {print substr($0, index($0, "/Volumes/")); exit}')"
+# The whole-disk device the image is attached as: detaching it unmounts the
+# volume and releases the image file, which the compression step needs.
+DEVICE="$(printf '%s\n' "$ATTACH_OUTPUT" | awk '/^\/dev\/disk[0-9]+[[:space:]]/ {print $1; exit}')"
 if [[ -z "$MOUNT" || ! -d "$MOUNT" ]]; then
     echo "✗ Could not find mounted volume in hdiutil output" >&2
     printf '%s\n' "$ATTACH_OUTPUT" >&2
@@ -129,27 +132,35 @@ elif (( STYLE_STATUS != 0 )); then
 fi
 
 sync
-# Finder or Spotlight can hold the volume for a while after the window
+# Finder or Spotlight can hold the image for a while after the window
 # closes, and a detach that reports failure may still finish a moment later.
-# So each attempt first checks whether the volume is still mounted, errors
-# are shown rather than hidden, and the last resort is a forced unmount.
-still_mounted() { /sbin/mount | grep -qF " on $MOUNT ("; }
+# Success means the image itself is no longer attached, not just that its
+# volume is unmounted: compression needs the file released. Errors are
+# shown, and the last resort is a forced unmount of the whole disk.
+# Read the listing whole: under pipefail, `hdiutil info | grep -q` reports
+# "not attached" when grep's early exit cuts hdiutil off mid-write.
+image_attached() {
+    local info
+    info="$(hdiutil info)"
+    [[ "$info" == *"${WORK:t}/rw.dmg"* ]]
+}
+detach_target="${DEVICE:-$MOUNT}"
 detach_errors="$(mktemp)"
-detached=0
 for attempt in {1..6}; do
-    if ! still_mounted; then detached=1; break; fi
-    if hdiutil detach "$MOUNT" 2>>"$detach_errors" >/dev/null; then detached=1; break; fi
+    image_attached || break
+    hdiutil detach "$detach_target" >/dev/null 2>>"$detach_errors" && ! image_attached && break
     sleep 2
-    if ! still_mounted; then detached=1; break; fi
-    if hdiutil detach "$MOUNT" -force 2>>"$detach_errors" >/dev/null; then detached=1; break; fi
-    echo "  volume still busy, retrying detach ($attempt of 6): $(tail -1 "$detach_errors")"
+    image_attached || break
+    hdiutil detach "$detach_target" -force >/dev/null 2>>"$detach_errors" && ! image_attached && break
+    echo "  image still busy, retrying detach ($attempt of 6): $(tail -1 "$detach_errors")"
     sleep 3
 done
-if (( ! detached )) && still_mounted; then
-    diskutil unmount force "$MOUNT" >/dev/null 2>>"$detach_errors" && detached=1
+if image_attached && [[ -n "$DEVICE" ]]; then
+    diskutil unmountDisk force "$DEVICE" >/dev/null 2>>"$detach_errors" || true
+    hdiutil detach "$DEVICE" -force >/dev/null 2>>"$detach_errors" || true
 fi
-if (( ! detached )) && still_mounted; then
-    echo "✗ Could not detach $MOUNT:" >&2
+if image_attached; then
+    echo "✗ Could not detach the disk image ($detach_target):" >&2
     cat "$detach_errors" >&2
     echo "Processes using it:" >&2
     lsof +f -- "$MOUNT" >&2 2>/dev/null || true
@@ -162,7 +173,14 @@ MOUNT=""
 echo "▸ Compressing…"
 mkdir -p dist
 rm -f "$OUT"
-hdiutil convert "$RW" -format UDZO -imagekey zlib-level=9 -o "$OUT" -quiet
+# The image file can stay locked for a moment after its detach.
+converted=0
+for attempt in 1 2 3 4; do
+    if hdiutil convert "$RW" -format UDZO -imagekey zlib-level=9 -o "$OUT" -ov; then converted=1; break; fi
+    echo "  compression failed (attempt $attempt of 4), retrying…" >&2
+    sleep 3
+done
+(( converted )) || { echo "✗ Could not compress the disk image" >&2; exit 1; }
 # A stable name too, so releases/latest/download/SasNotch.dmg always works.
 cp "$OUT" dist/SasNotch.dmg
 
