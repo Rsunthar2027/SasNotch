@@ -12,6 +12,7 @@ struct SasNotchOnboardingView: View {
     var onFinish: () -> Void
 
     @ObservedObject private var permissions = Permissions.shared
+    @ObservedObject private var reminders = NotchRemindersService.shared
     @State private var pollingDemand = UUID()
     @State private var music: Permissions.AutomationStatus = .notDeterminable
     @State private var askingMusic = false
@@ -26,6 +27,7 @@ struct SasNotchOnboardingView: View {
                         row(.screenRecording)
                         row(.camera)
                         row(.calendar)
+                        row(.reminders)
                         row(.music)
                         row(.notifications)
                     }
@@ -80,7 +82,7 @@ struct SasNotchOnboardingView: View {
     }
 
     enum Item {
-        case accessibility, screenRecording, camera, calendar, music, notifications
+        case accessibility, screenRecording, camera, calendar, reminders, music, notifications
     }
 
     private func row(_ item: Item) -> some View {
@@ -139,6 +141,12 @@ struct SasNotchOnboardingView: View {
             case .denied, .restricted: return .denied
             default: return .missing
             }
+        case .reminders:
+            switch reminders.access {
+            case .fullAccess: return .granted
+            case .denied, .restricted: return .denied
+            default: return .missing
+            }
         case .music:
             switch music {
             case .granted: return .granted
@@ -160,6 +168,7 @@ struct SasNotchOnboardingView: View {
         case .screenRecording: permissions.requestScreenRecording()
         case .camera: permissions.requestCamera()
         case .calendar: permissions.requestCalendar()
+        case .reminders: reminders.requestAccess()
         case .notifications:
             Notifier.requestPermission()
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { permissions.refresh() }
@@ -178,6 +187,7 @@ struct SasNotchOnboardingView: View {
         case .screenRecording: permissions.openScreenRecordingSettings()
         case .camera: permissions.openCameraSettings()
         case .calendar: permissions.openCalendarSettings()
+        case .reminders: reminders.openSettings()
         case .music: permissions.openAutomationSettings()
         case .notifications: permissions.openNotificationSettings()
         }
@@ -199,6 +209,7 @@ struct SasNotchOnboardingView: View {
         case .screenRecording: return "rectangle.dashed.badge.record"
         case .camera: return "web.camera"
         case .calendar: return "calendar"
+        case .reminders: return "checklist"
         case .music: return "music.note"
         case .notifications: return "bell.badge"
         }
@@ -210,6 +221,7 @@ struct SasNotchOnboardingView: View {
         case .screenRecording: return "Screen Recording"
         case .camera: return "Camera"
         case .calendar: return "Calendar"
+        case .reminders: return "Reminders"
         case .music: return "Music"
         case .notifications: return "Notifications"
         }
@@ -225,6 +237,8 @@ struct SasNotchOnboardingView: View {
             return "The Mirror tab. The camera runs only while the Mirror is open and turns off when the island closes."
         case .calendar:
             return "Your next events in the island and on the lock screen. Events never leave your Mac."
+        case .reminders:
+            return "Reminders due today, under your calendar in the island. Tick them off from there."
         case .music:
             return "Shuffle and track details for the Music app. Playback controls work without it."
         case .notifications:

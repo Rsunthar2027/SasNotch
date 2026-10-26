@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- The island's Calendar page lists the reminders due today, and overdue ones, under your events. Tick one off to complete it in Reminders. Switch it off in Settings › Dynamic Island › Calendar.
+- Reminders joins the first-launch permissions screen.
+
+### Changed
+- The installer window is a misty pine forest, with sasquatch footprints leading to the Applications folder.
+- The README has a download button for the DMG and step-by-step help for the "Apple could not verify" warning.
+
 ## [1.0.0] - 2026-10-26
 
 ### Summary

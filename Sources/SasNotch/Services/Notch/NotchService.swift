@@ -1172,6 +1172,7 @@ final class NotchService: ObservableObject {
         NotchTimerService.shared.syncWithPreferences()
         NotchAccessoryService.shared.syncWithPreferences()
         FocusStatusService.shared.syncWithPreferences()
+        NotchRemindersService.shared.syncWithPreferences()
         PrivacyIndicatorService.shared.syncWithPreferences()
         WeatherService.shared.syncWithPreferences()
         let signature = NotchEvent.allCases.map { String(NotchSupport.routes($0)) }.joined()
@@ -1260,6 +1261,7 @@ final class NotchService: ObservableObject {
         NotchTimerService.shared.stop()
         NotchAccessoryService.shared.stop()
         FocusStatusService.shared.stop()
+        NotchRemindersService.shared.stop()
         PrivacyIndicatorService.shared.stop()
         NotchWatchService.shared.stop()
         let cancelCapture = captureControlsCancel

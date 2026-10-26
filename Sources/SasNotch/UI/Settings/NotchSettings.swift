@@ -34,6 +34,8 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchAccessoriesEnabled) private var accessoriesEnabled = true
     @AppStorage(DefaultsKey.notchCalendarEnabled) private var calendarEnabled = true
     @AppStorage(DefaultsKey.notchCalendarCountdown) private var calendarCountdown = false
+    @AppStorage(DefaultsKey.notchRemindersEnabled) private var remindersEnabled = true
+    @ObservedObject private var remindersService = NotchRemindersService.shared
     @AppStorage(DefaultsKey.notchCalendarTimeLeft) private var calendarTimeLeft = false
     @AppStorage(DefaultsKey.notchCalendarWeekNumbers) private var calendarWeekNumbers = false
     @AppStorage(DefaultsKey.notchAgentsEnabled) private var agentsEnabled = false
@@ -138,7 +140,7 @@ struct NotchSettings: View {
     private var editor: NotchEditorStrings { FeatureStrings.notchEditor(l10n.language) }
 
     private var configuration: [String] {
-        [String(enabled), String(calendarEnabled), String(calendarCountdown), String(calendarTimeLeft),
+        [String(enabled), String(calendarEnabled), String(calendarCountdown), String(calendarTimeLeft), String(remindersEnabled),
          String(notificationsEnabled), String(dismissNativeNotifications), String(gesturesEnabled),
          String(lyricsEnabled), String(lyricsOnline), String(queueEnabled), String(liveEqualizer),
          String(showPlayingMusic), String(includeOtherPlayers), String(musicShowVolume), idle, hiddenControls, controlOrder, size,
@@ -518,6 +520,18 @@ struct NotchSettings: View {
                       isOn: $calendarCountdown)
             switchRow("hourglass", calendar.timeLeft, caption: calendar.timeLeftHint, isOn: $calendarTimeLeft)
             switchRow("number", calendar.weekNumbers, isOn: $calendarWeekNumbers)
+            switchRow("checklist", RemindersText.settingsToggle, caption: RemindersText.settingsCaption,
+                      isOn: $remindersEnabled)
+            if remindersEnabled {
+                if remindersService.hasAccess {
+                    Label(l10n.s.permissionGranted, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                } else if remindersService.access == .denied || remindersService.access == .restricted {
+                    Button(RemindersText.openSettings, action: remindersService.openSettings)
+                } else {
+                    Button(RemindersText.allow, action: remindersService.requestAccess)
+                        .disabled(remindersService.requesting)
+                }
+            }
             if permissions.calendarAccess == .fullAccess { NotchCalendarSelection() }
         case .timer:
             let activities = FeatureStrings.notchActivities(l10n.language)

@@ -6,13 +6,20 @@
 
 <p align="center">A Dynamic Island for your Mac's notch, with a dozen everyday utilities inside it.</p>
 
-**Install with one line** (paste into Terminal):
+<p align="center">
+  <a href="https://github.com/Rsunthar2027/SasNotch/releases/latest/download/SasNotch.dmg"><img src="https://img.shields.io/badge/Download-SasNotch.dmg-5B3A22?style=for-the-badge&logo=apple&logoColor=white" height="44" alt="Download SasNotch.dmg"></a>
+</p>
+
+<p align="center">
+  Free and open source · Apple Silicon · macOS 14 or later<br>
+  First time opening it? See <a href="#first-launch-apple-could-not-verify-sasnotch">how to get past the security warning</a>.
+</p>
+
+**Or install with one line** (paste into Terminal). This way there is no security warning at all, because files that `curl` downloads are not quarantined:
 
 ```sh
 curl -L https://github.com/Rsunthar2027/SasNotch/releases/latest/download/SasNotch.zip -o /tmp/SasNotch.zip && unzip -o /tmp/SasNotch.zip -d /Applications && open /Applications/SasNotch.app
 ```
-
-Files that `curl` downloads are not quarantined, so macOS opens SasNotch without a Gatekeeper warning.
 
 <p align="center">
   <!-- Replace with a screenshot or GIF of the island opening on hover (docs/hero.gif). -->
@@ -26,7 +33,7 @@ Point at the notch and the island opens. Click it and it stays open until you cl
 **Around the notch**
 - Music controls with album art, a live visualizer, lyrics and the up-next queue
 - Timers, a stopwatch and a Pomodoro, with a countdown in the notch
-- Your next calendar events and a month view
+- Your next calendar events and a month view, with the reminders due today listed underneath. Tick one off right from the island.
 - Notifications, download progress and AI agent usage (Claude, Codex and others)
 - A file shelf: drop files on the island and pick them up later
 - Mirror: a live camera preview for checking yourself before a call. The camera turns off when the island closes.
@@ -44,25 +51,47 @@ Every part is a module you can switch on or off in Settings. You can resize the 
 
 ## Install
 
-### One line (recommended)
+### Download the DMG
 
-Use the command at the top of this page. It downloads the latest release, puts SasNotch in Applications and opens it. To update by hand, run it again. SasNotch also updates itself: Menu bar icon › Check for Updates.
+1. Click **[Download SasNotch.dmg](https://github.com/Rsunthar2027/SasNotch/releases/latest/download/SasNotch.dmg)**.
+2. Open the downloaded file. A window opens in a misty forest: drag the **SasNotch** icon along the footprints onto the **Applications** folder.
+3. Open SasNotch from Applications, Launchpad or Spotlight. The first time, macOS shows a security warning; the next section gets you past it in under a minute.
 
-### From the browser
+<p align="center">
+  <img src="docs/installer-window.png" width="480" alt="The SasNotch installer window: drag the app onto Applications">
+</p>
 
-1. Download **SasNotch.dmg** from the [latest release](https://github.com/Rsunthar2027/SasNotch/releases/latest).
-2. Open it and drag SasNotch to Applications.
-3. Open SasNotch. macOS says it can't verify the developer, because SasNotch is signed with its own certificate rather than a paid Apple Developer ID.
-4. Open **System Settings › Privacy & Security**, scroll down to the message about SasNotch and click **Open Anyway**, then confirm.
+### First launch: "Apple could not verify SasNotch"
+
+macOS shows this for every app whose developer hasn't paid for Apple's $99-a-year Developer Program. SasNotch is signed with its own certificate instead, its source code is public in this repository, and every release lists SHA-256 checksums. You only need to do this once: updates from **Check for Updates** install without the warning.
+
+**Option 1: System Settings** (no Terminal needed)
+
+1. Open SasNotch. When the warning appears, click **Done**. Don't click Move to Trash.
+2. Open the Apple menu  › **System Settings** › **Privacy & Security**.
+3. Scroll down to **Security**. You'll see "SasNotch was blocked to protect your Mac." Click **Open Anyway**.
+4. Confirm with your password or Touch ID, then click **Open Anyway** once more. SasNotch opens, and macOS remembers your choice.
 
 <!-- Replace with a GIF of these steps (docs/open-anyway.gif). -->
 <img src="docs/open-anyway-placeholder.png" width="560" alt="Placeholder for a GIF of clicking Open Anyway in Privacy & Security">
 
-If you prefer Terminal, this removes the download quarantine so the app opens directly:
+On macOS 15 and later, Control-clicking the app and choosing Open no longer skips the warning, so use the steps above.
+
+**Option 2: one Terminal command**
+
+This removes the download's quarantine flag from SasNotch only, so it opens directly:
 
 ```sh
-xattr -dr com.apple.quarantine /Applications/SasNotch.app
+xattr -dr com.apple.quarantine /Applications/SasNotch.app && open /Applications/SasNotch.app
 ```
+
+**Option 3: the one-line install** at the top of this page never shows the warning.
+
+Please don't turn Gatekeeper off for your whole Mac (`sudo spctl --master-disable`) to get around this. The steps above trust SasNotch alone and keep the rest of your Mac protected.
+
+### Updating
+
+SasNotch checks for updates once a day. To check now, click the sasquatch in the menu bar and choose **Check for Updates**. You can also run the one-line install again, or download the DMG again.
 
 ## Requirements
 
@@ -80,6 +109,7 @@ The first launch shows one screen with an **Allow** button for each permission. 
 | Screen Recording | Live thumbnails in the app switcher and Dock previews, screenshots |
 | Camera | The Mirror tab, and only while it is open |
 | Calendar | Your events in the island and on the lock screen |
+| Reminders | Reminders due today, under your calendar in the island |
 | Music (Automation) | Shuffle and track details in the Music app. Play, pause and skip work without it. |
 | Notifications | Timer alerts and notices from SasNotch |
 

@@ -82,6 +82,10 @@
 	<string>SasNotch organizes confirmed WhatsApp downloads in a destination folder you explicitly choose. The Cleaner also looks for forgotten screenshots when you save screenshots here.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>SasNotch shows the reminders due today under your calendar in the island, and marks them done when you tick them off. Reminders stay on this Mac.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>SasNotch shows the reminders due today under your calendar in the island, and marks them done when you tick them off. Reminders stay on this Mac.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>SasNotch organizes confirmed WhatsApp downloads in a destination folder you explicitly choose. The Cleaner also looks for forgotten screenshots when you save screenshots here.</string>
 	<key>SUEnableAutomaticChecks</key>

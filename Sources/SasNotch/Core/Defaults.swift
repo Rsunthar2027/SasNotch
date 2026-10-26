@@ -947,6 +947,7 @@ enum DefaultsKey {
     static let notchLockWeatherCity = "notchLockWeatherCity"
     static let notchLockBattery = "notchLockBattery"
     static let notchFocusEnabled = "notchFocusEnabled"
+    static let notchRemindersEnabled = "notchRemindersEnabled"
     static let islandPaused = "islandPaused"
     static let notchFocusShortcut = "notchFocusShortcut"
     static let notchPrivacyEnabled = "notchPrivacyEnabled"
@@ -1553,6 +1554,7 @@ enum Defaults {
         DefaultsKey.notchLockWeatherCity: "",
         DefaultsKey.notchLockBattery: true,
         DefaultsKey.notchFocusEnabled: true,
+        DefaultsKey.notchRemindersEnabled: true,
         DefaultsKey.islandPaused: false,
         DefaultsKey.notchFocusShortcut: "",
         DefaultsKey.notchPrivacyEnabled: true,

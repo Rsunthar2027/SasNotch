@@ -12,6 +12,7 @@ struct NotchCalendarView: View {
     @ObservedObject private var calendar = NotchCalendarService.shared
     @ObservedObject private var permissions = Permissions.shared
     @AppStorage(DefaultsKey.notchCalendarCountdown) private var countdownForEvery = false
+    @AppStorage(DefaultsKey.notchRemindersEnabled) private var showsReminders = true
     @Environment(\.notchBand) private var band
     /// The day the month grid or the week strip is built around.
     @State private var focus = Date()
@@ -38,6 +39,7 @@ struct NotchCalendarView: View {
                                 VStack(alignment: .leading, spacing: 12) {
                                     agendaHeader
                                     agenda(now: context.date)
+                                    remindersBelowCalendar
                                 }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             }
@@ -47,6 +49,7 @@ struct NotchCalendarView: View {
                             VStack(spacing: NotchLayout.rowSpacing) {
                                 weekStrip(now: context.date)
                                 agenda(now: context.date)
+                                remindersBelowCalendar
                             }
                         }
                     }
@@ -79,6 +82,16 @@ struct NotchCalendarView: View {
         .onDisappear {
             if ownsMonth { calendar.showMonth(nil) }
             if !preview { NotchService.shared.setPageLayer(.calendar, close: nil); calendar.revealing = nil }
+        }
+    }
+
+    /// Today's reminders, below the day's events, when the person keeps them on.
+    @ViewBuilder private var remindersBelowCalendar: some View {
+        if showsReminders {
+            VStack(alignment: .leading, spacing: 8) {
+                Rectangle().fill(.white.opacity(0.12)).frame(height: 1).accessibilityHidden(true)
+                NotchRemindersSection(visibleRows: size.height >= 300 ? 4 : 2)
+            }
         }
     }
 
