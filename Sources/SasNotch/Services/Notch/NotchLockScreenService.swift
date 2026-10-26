@@ -108,7 +108,9 @@ final class NotchLockScreenService {
             music: NotchLockScreenSupport.showsMusic(), timer: NotchTimerSupport.isEnabled(),
             agents: NotchAgentSupport.showsLiveActivity(),
             downloads: NotchSupport.routes(.download), countdown: NotchCalendarSupport.showsCountdown(),
-            timeLeft: NotchCalendarSupport.showsTimeLeft())
+            timeLeft: NotchCalendarSupport.showsTimeLeft(),
+            battery: NotchLockScreenBattery.isShown(), weather: WeatherService.isEnabled())
+        if gates.weather { WeatherService.shared.refreshIfStale() }
         if model.gates != gates { model.gates = gates }
         var scene: [NotchLockScreenPanel] = []
         // Without the Music section there is no player to show or to click.

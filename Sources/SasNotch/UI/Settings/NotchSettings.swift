@@ -90,7 +90,13 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchHiddenControls) private var hiddenControls = NotchControlItem.defaultHidden
     @AppStorage(DefaultsKey.notchControlOrder) private var controlOrder = ""
     @AppStorage(DefaultsKey.notchShowInCaptures) private var showInCaptures = true
-    @AppStorage(DefaultsKey.notchLockScreen) private var lockScreen = false
+    @AppStorage(DefaultsKey.notchLockScreen) private var lockScreen = true
+    @AppStorage(DefaultsKey.notchLockWeather) private var lockWeather = true
+    @AppStorage(DefaultsKey.notchLockWeatherCity) private var lockWeatherCity = ""
+    @AppStorage(DefaultsKey.notchLockBattery) private var lockBattery = true
+    @AppStorage(DefaultsKey.notchFocusEnabled) private var focusEnabled = true
+    @AppStorage(DefaultsKey.notchFocusShortcut) private var focusShortcut = ""
+    @AppStorage(DefaultsKey.notchPrivacyEnabled) private var privacyEnabled = true
     @AppStorage(DefaultsKey.notchLockSounds) private var lockSounds = false
     @AppStorage(DefaultsKey.notchSize) private var size = NotchSize.spacious.rawValue
     @AppStorage(DefaultsKey.notchOutlineEnabled) private var outlineEnabled = false
@@ -140,6 +146,8 @@ struct NotchSettings: View {
          String(cameraEnabled), String(accessoriesEnabled), String(outlineEnabled), String(hideMenuBarGap),
          String(customWidth), String(customHeight), String(cameraFitWidth), String(cameraFitHeight),
          String(compactExtraWidth), String(compactExtraHeight), String(compactCornerRadius), String(expandedCornerRadius),
+         String(lockScreen), String(lockWeather), lockWeatherCity, String(lockBattery),
+         String(focusEnabled), focusShortcut, String(privacyEnabled),
          String(capsuleFitWidth), String(capsuleFitHeight), String(capsuleFitDrop), String(hapticFeedback),
          String(shelfWindow), String(dragReveal), String(captureControls), String(quickPanel), String(appPanel),
          String(hoverExpand), String(hideUntilHover), String(hiddenShowsActivity), String(hideInFullscreen),
@@ -668,6 +676,40 @@ struct NotchSettings: View {
             SettingsCard(title: locked.title) {
                 switchRow("lock.display", locked.show, caption: locked.showHint, isOn: $lockScreen)
                 switchRow("speaker.wave.2", locked.sounds, caption: locked.soundsHint, isOn: $lockSounds)
+                if lockScreen {
+                    switchRow("cloud.sun", LockWidgetText.weatherToggle, caption: LockWidgetText.weatherCaption,
+                              isOn: $lockWeather)
+                    if lockWeather {
+                        HStack {
+                            Text(LockWidgetText.cityField)
+                            TextField(LockWidgetText.cityField, text: $lockWeatherCity,
+                                      prompt: Text(LockWidgetText.cityPlaceholder))
+                                .labelsHidden()
+                                .textFieldStyle(.roundedBorder)
+                                .onSubmit { WeatherService.shared.refresh() }
+                        }
+                        .padding(.leading, settingsRowTextInset)
+                    }
+                    if PowerSampler.hasInternalBattery {
+                        switchRow("battery.100percent.bolt", LockWidgetText.batteryToggle,
+                                  caption: LockWidgetText.batteryCaption, isOn: $lockBattery)
+                    }
+                }
+            }
+            SettingsCard(title: FocusText.title) {
+                switchRow("moon", FocusText.settingsToggle, caption: FocusText.settingsCaption, isOn: $focusEnabled)
+                if focusEnabled {
+                    HStack {
+                        Text(FocusText.shortcutField)
+                        TextField(FocusText.shortcutField, text: $focusShortcut,
+                                  prompt: Text(FocusStatusService.defaultShortcutName))
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    .padding(.leading, settingsRowTextInset)
+                }
+                switchRow("video", PrivacyText.settingsToggle, caption: PrivacyText.settingsCaption,
+                          isOn: $privacyEnabled)
             }
         }
     }

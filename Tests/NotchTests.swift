@@ -1907,8 +1907,8 @@ enum NotchTests {
                                 DefaultsKey.notchCapture, DefaultsKey.notchTrackChange]
         suite.expect(enabledByDefault.allSatisfy { firstDefaults[$0] as? Bool == true },
                      "installed island sections and activity indicators start enabled")
-        suite.expect(firstDefaults[DefaultsKey.notchLiveEqualizer] as? Bool == false,
-                     "the live equalizer starts off because it asks for system audio recording")
+        suite.expect(firstDefaults[DefaultsKey.notchLiveEqualizer] as? Bool == true,
+                     "the live music visualizer starts on with the other media features")
         suite.expect(firstDefaults[DefaultsKey.notchAgentsEnabled] as? Bool == false,
                      "new island setups leave local agent history reading off until chosen")
         suite.expect(firstDefaults[DefaultsKey.notchIncludeOtherPlayers] as? Bool == true,
@@ -1956,7 +1956,7 @@ enum NotchTests {
                      "a saved island choice stays configured even if the master switch was never used")
 
         suite.expect(!NotchSupport.isEnabled(in: defaults), "notch is opt-in")
-        suite.expect(NotchSupport.controls(in: defaults) == [.volume, .brightness, .music, .mixer, .keepAwake, .timer, .calendar],
+        suite.expect(NotchSupport.controls(in: defaults) == [.volume, .brightness, .music, .mixer, .keepAwake, .focus, .timer, .calendar],
                "home defaults prioritize playback and everyday system controls")
         defaults.set(false, forKey: DefaultsKey.notchTimerEnabled)
         defaults.set(false, forKey: DefaultsKey.notchCalendarEnabled)

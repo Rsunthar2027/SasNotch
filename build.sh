@@ -265,6 +265,7 @@ if (( TEST )); then
         Sources/SasNotch/Services/Notch/NotchTimerAlert.swift
         Sources/SasNotch/UI/Notch/NotchIslandAlert.swift
         Sources/SasNotch/Services/Notch/NotchAccessorySupport.swift
+        Sources/SasNotch/Services/LiveActivities/LiveActivitySupport.swift
         Sources/SasNotch/Services/Notch/NotchAccessoryConnectionMonitor.swift
         Sources/SasNotch/Services/QuickTools/CameraPreviewSupport.swift
         Sources/SasNotch/Core/NotchMusicExtrasStrings.swift

@@ -8,7 +8,7 @@ import CoreGraphics
 /// What the lock screen reads out under the clock, in the order the line
 /// gives them up when it runs short.
 enum NotchLockScreenActivity: String, CaseIterable, Identifiable {
-    case timer, calendar, agents, downloads
+    case timer, calendar, agents, downloads, battery, weather
 
     var id: String { rawValue }
 }
@@ -46,13 +46,16 @@ enum NotchLockScreenSupport {
         session.completed || session.deadline.map { now >= $0 } == true
     }
 
-    static func activities(timer: Bool, calendar: Bool, agents: Bool, downloads: Bool) -> [NotchLockScreenActivity] {
+    static func activities(timer: Bool, calendar: Bool, agents: Bool, downloads: Bool,
+                           battery: Bool = false, weather: Bool = false) -> [NotchLockScreenActivity] {
         NotchLockScreenActivity.allCases.filter {
             switch $0 {
             case .timer: return timer
             case .calendar: return calendar
             case .agents: return agents
             case .downloads: return downloads
+            case .battery: return battery
+            case .weather: return weather
             }
         }
     }

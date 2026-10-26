@@ -50,9 +50,9 @@ enum NotchLockScreenTests {
     }
 
     static func preferenceContracts(_ suite: TestSuite) {
-        suite.expect(Defaults.registeredDefaults[DefaultsKey.notchLockScreen] as? Bool == false
+        suite.expect(Defaults.registeredDefaults[DefaultsKey.notchLockScreen] as? Bool == true
                      && Defaults.registeredDefaults[DefaultsKey.notchLockSounds] as? Bool == false,
-                     "the lock screen and its sounds are both opt-in")
+                     "the lock screen widgets start on and their sounds are opt-in")
         suite.expect(SettingsBackupSupport.exportKeys().isSuperset(of: [DefaultsKey.notchLockScreen, DefaultsKey.notchLockSounds]),
                      "settings backups carry the lock screen preferences")
         let domain = "com.sasnotch.tests.notch-lock-screen"
@@ -157,9 +157,13 @@ enum NotchLockScreenTests {
     }
 
     static func contentContracts(_ suite: TestSuite) {
-        suite.expect(NotchLockScreenSupport.activities(timer: true, calendar: true, agents: true, downloads: true)
+        suite.expect(NotchLockScreenSupport.activities(timer: true, calendar: true, agents: true, downloads: true,
+                                                       battery: true, weather: true)
                         == NotchLockScreenActivity.allCases,
-                     "the line reads the timer, the next event, agents and downloads, in that order")
+                     "the line reads the timer, the next event, agents, downloads, battery and weather, in that order")
+        suite.expect(NotchLockScreenSupport.activities(timer: true, calendar: false, agents: false, downloads: false)
+                        == [.timer],
+                     "battery and weather join the line only when asked for")
         suite.expect(NotchLockScreenSupport.activities(timer: false, calendar: false, agents: true, downloads: true)
                         == [.agents, .downloads],
                      "only live activities are read out")

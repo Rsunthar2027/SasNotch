@@ -83,6 +83,7 @@ struct MetricsTests {
                 ReleaseDigestTests.run(suite)
             }),
             ("repository", { RepositoryFeatureTests.run(suite) }),
+            ("live-activities", { LiveActivityTests.run(suite) }),
             ("screenshots", {
                 ScreenshotClipboardTests.run(suite)
                 ScreenshotAutoCopyTests.run(suite)

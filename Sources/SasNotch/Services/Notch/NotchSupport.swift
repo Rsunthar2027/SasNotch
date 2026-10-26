@@ -1323,7 +1323,7 @@ enum NotchControlSetupRequirement: Equatable {
 }
 
 enum NotchControlItem: String, CaseIterable, Identifiable {
-    case volume, brightness, keyboardLight, music, mixer, keepAwake, timer, calendar, microphone, screenshot, recording, speedTest, panel, commandBar, scratchpad
+    case volume, brightness, keyboardLight, music, mixer, keepAwake, focus, timer, calendar, microphone, screenshot, recording, speedTest, panel, commandBar, scratchpad
     static let defaultHidden = "keyboardLight,microphone,screenshot,recording,speedTest,panel,commandBar,scratchpad"
     var id: String { rawValue }
 
@@ -1342,6 +1342,7 @@ enum NotchControlItem: String, CaseIterable, Identifiable {
         case .brightness: return "sun.max.fill"
         case .keyboardLight: return "light.max"
         case .keepAwake: return "cup.and.saucer"
+        case .focus: return "moon.fill"
         case .microphone: return "mic.fill"
         case .screenshot: return "camera.viewfinder"
         case .recording: return "record.circle"
@@ -1368,6 +1369,7 @@ enum NotchControlItem: String, CaseIterable, Identifiable {
         case .commandBar: return .feature(.commandBar)
         case .scratchpad: return .feature(.scratchpad)
         case .panel: return .none
+        case .focus: return .feature(.notch)
         case .mixer: return .page(.mixer, feature: .mixer)
         case .speedTest: return .page(.system, feature: .monitorNetwork)
         case .music: return .page(.music, feature: nil)
@@ -1390,6 +1392,7 @@ enum NotchControlItem: String, CaseIterable, Identifiable {
         case .commandBar: return AppFeature.commandBar.isAvailable(in: defaults)
         case .scratchpad: return AppFeature.scratchpad.isAvailable(in: defaults)
         case .panel: return true
+        case .focus: return defaults.bool(forKey: DefaultsKey.notchFocusEnabled)
         case .music: return NotchSupport.modules(in: defaults).contains(.music)
         case .timer: return NotchSupport.modules(in: defaults).contains(.timer)
         case .calendar: return NotchSupport.modules(in: defaults).contains(.calendar)
@@ -1640,7 +1643,7 @@ enum NotchQuickAccessLayout {
 }
 
 enum NotchEvent: String, CaseIterable {
-    case volume, brightness, battery, clipboard, capture, systemNotification, keyboardLight, timer, accessory, download, agents, track, microphone, watch, inputSource
+    case volume, brightness, battery, clipboard, capture, systemNotification, keyboardLight, timer, accessory, download, agents, track, microphone, watch, inputSource, focus, privacy
 
     var preferenceKey: String {
         switch self {
@@ -1659,6 +1662,8 @@ enum NotchEvent: String, CaseIterable {
         case .battery: return DefaultsKey.notchBattery
         case .clipboard: return DefaultsKey.notchClipboard
         case .capture: return DefaultsKey.notchCapture
+        case .focus: return DefaultsKey.notchFocusEnabled
+        case .privacy: return DefaultsKey.notchPrivacyEnabled
         }
     }
 
@@ -1666,7 +1671,7 @@ enum NotchEvent: String, CaseIterable {
         switch self {
         case .volume, .brightness, .keyboardLight, .microphone, .inputSource: return 3
         case .capture, .timer, .watch: return 2
-        case .battery, .systemNotification, .accessory, .agents: return 1
+        case .battery, .systemNotification, .accessory, .agents, .focus, .privacy: return 1
         case .clipboard, .download, .track: return 0
         }
     }
@@ -1674,7 +1679,7 @@ enum NotchEvent: String, CaseIterable {
     var duration: TimeInterval {
         switch self {
         case .volume, .brightness, .keyboardLight, .microphone, .inputSource: return 1.6
-        case .systemNotification, .track: return 3
+        case .systemNotification, .track, .focus, .privacy: return 3
         case .timer, .download, .watch: return 6
         case .agents: return 5
         case .battery, .accessory: return 4
@@ -2089,6 +2094,8 @@ enum NotchSupport {
         case .track: return modules(in: defaults).contains(.music)
         // A layout notice needs no feature of its own, only its own toggle.
         case .inputSource: return true
+        // Focus and the camera and microphone dots read the system directly.
+        case .focus, .privacy: return true
         }
     }
 

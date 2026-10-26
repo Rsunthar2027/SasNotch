@@ -95,6 +95,7 @@ struct NotchControlsView: View {
     @ViewBuilder private func shortcut(_ item: NotchControlItem) -> some View {
         switch item {
         case .keepAwake: NotchAwakeButton()
+        case .focus: NotchFocusButton()
         case .microphone: NotchMicButton()
         case .screenshot:
             NotchActionTile(symbol: item.symbol, title: item.title(l10n)) {
@@ -125,6 +126,7 @@ extension NotchControlItem {
         case .brightness: return FeatureStrings.notch(l10n.language).brightness
         case .keyboardLight: return FeatureStrings.brightness(l10n.language).keyboardLight
         case .keepAwake: return l10n.s.keepAwakeTitle
+        case .focus: return FocusText.title
         case .microphone: return l10n.s.micMuteName
         case .screenshot: return FeatureStrings.recentCaptures(l10n.language).screenshot
         case .recording: return FeatureStrings.recorder(l10n.language).pageTitle
@@ -576,6 +578,19 @@ private struct NotchRecorderButton: View {
                         title: FeatureStrings.recorder(l10n.language).pageTitle,
                         active: recorder.isRecording, accent: .alert) {
             service.perform { recorder.toggle() }
+        }
+    }
+}
+
+/// Focus as a tile: the moon fills while a Focus is on. A click runs the
+/// Focus shortcut, which macOS requires for turning Focus on or off.
+struct NotchFocusButton: View {
+    @ObservedObject private var focus = FocusStatusService.shared
+
+    var body: some View {
+        NotchActionTile(symbol: focus.isActive == true ? "moon.fill" : "moon",
+                        title: focus.isActive == true ? FocusText.on : FocusText.title) {
+            focus.toggle()
         }
     }
 }

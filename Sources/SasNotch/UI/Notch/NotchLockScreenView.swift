@@ -15,6 +15,8 @@ final class NotchLockScreenModel: ObservableObject {
         var downloads = false
         var countdown = false
         var timeLeft = false
+        var battery = false
+        var weather = false
     }
 
     @Published var gates = Gates()
@@ -305,6 +307,8 @@ struct NotchLockScreenActivities: View {
     @ObservedObject private var downloads = NotchDownloadService.shared
     @ObservedObject private var calendar = NotchCalendarService.shared
     @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var weather = WeatherService.shared
+    @StateObject private var battery = NotchLockScreenBattery()
     @AppStorage(DefaultsKey.notchAgentsReadout) private var readout = NotchAgentReadout.elapsed.rawValue
     @AppStorage(DefaultsKey.notchAgentsLimitDisplay) private var display = NotchAgentLimitDisplay.remaining.rawValue
     @AppStorage(DefaultsKey.notchAgentsLimitFocus) private var focus = NotchAgentLimitFocus.mostUsed.rawValue
@@ -333,7 +337,9 @@ struct NotchLockScreenActivities: View {
                 ($0.ongoing ? gates.timeLeft : gates.countdown || calendar.isChosen($0.event)) && $0.isShown(at: date)
             } == true,
             agents: gates.agents && !usage.snapshot.live.isEmpty,
-            downloads: gates.downloads && downloads.items.contains { $0.active && !$0.completed })
+            downloads: gates.downloads && downloads.items.contains { $0.active && !$0.completed },
+            battery: gates.battery && battery.reading.map(NotchLockScreenBattery.isWorthShowing) == true,
+            weather: gates.weather && weather.snapshot != nil)
     }
 
     private func line(_ items: [NotchLockScreenActivity], at date: Date) -> some View {
@@ -399,6 +405,30 @@ struct NotchLockScreenActivities: View {
             .accessibilityLabel(working.map(\.displayName).joined(separator: ", ") + ", "
                                 + FeatureStrings.notchLockScreen(l10n.language).working)
             .accessibilityValue(reading)
+        case .battery:
+            if let reading = battery.reading {
+                let percent = reading.chargePercent ?? 0
+                HStack(spacing: 7) {
+                    Image(systemName: reading.externalConnected ? "battery.100percent.bolt"
+                          : percent <= 20 ? "battery.25percent" : "battery.75percent")
+                        .foregroundStyle(reading.externalConnected ? .green : percent <= 20 ? .red : .white)
+                    Text("\(percent)%")
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(reading.externalConnected ? "Charging" : "Battery")
+            }
+        case .weather:
+            if let now = weather.snapshot {
+                HStack(spacing: 7) {
+                    Image(systemName: now.symbol).symbolRenderingMode(.multicolor)
+                    Text("\(Int(now.temperature.rounded()))°")
+                    if let place = now.place {
+                        Text(place).foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(now.summary)
+            }
         case .downloads:
             // Progress without the file's name, which stays off the lock screen.
             let fraction = downloads.items.first(where: { $0.active && !$0.completed })?.fraction
@@ -412,6 +442,35 @@ struct NotchLockScreenActivities: View {
             }
             .accessibilityElement(children: .combine)
         }
+    }
+}
+
+/// The battery as the lock screen reads it, sampled while that line is shown.
+@MainActor
+final class NotchLockScreenBattery: ObservableObject {
+    @Published private(set) var reading: PowerReading?
+    private let sampler: PowerSampler? = PowerSampler.hasInternalBattery ? PowerSampler(smc: nil) : nil
+    private var timer: Timer?
+
+    init() {
+        reading = sampler?.sample()
+        let timer = Timer(timeInterval: 15, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.reading = self?.sampler?.sample() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    deinit { timer?.invalidate() }
+
+    /// The battery shows while charging, and when it runs low, on Macs that have one.
+    nonisolated static func isShown(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: DefaultsKey.notchLockBattery) && PowerSampler.hasInternalBattery
+    }
+
+    nonisolated static func isWorthShowing(_ reading: PowerReading) -> Bool {
+        guard reading.hasBattery || reading.chargePercent != nil else { return false }
+        return reading.externalConnected || (reading.chargePercent ?? 100) <= 20
     }
 }
 

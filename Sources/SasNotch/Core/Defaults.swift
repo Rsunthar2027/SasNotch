@@ -943,6 +943,12 @@ enum DefaultsKey {
     static let notchMusicActivity = "notchMusicActivity"
     static let notchShowInCaptures = "notchShowInCaptures"
     static let notchLockScreen = "notchLockScreen" // music and live activities over the lock screen
+    static let notchLockWeather = "notchLockWeather"
+    static let notchLockWeatherCity = "notchLockWeatherCity"
+    static let notchLockBattery = "notchLockBattery"
+    static let notchFocusEnabled = "notchFocusEnabled"
+    static let notchFocusShortcut = "notchFocusShortcut"
+    static let notchPrivacyEnabled = "notchPrivacyEnabled"
     static let notchLockSounds = "notchLockSounds" // padlock sounds as the Mac locks and unlocks
     // Companion: a small friend who rests in the closed island and is the Command Bar's face.
     static let notchMascotEnabled = "notchMascotEnabled"
@@ -1496,7 +1502,7 @@ enum Defaults {
         DefaultsKey.notchLyricsEnabled: true,
         DefaultsKey.notchLyricsOnline: false,
         DefaultsKey.notchBrowserCovers: false,
-        DefaultsKey.notchLiveEqualizer: false,
+        DefaultsKey.notchLiveEqualizer: true,
         DefaultsKey.notchQueueEnabled: true,
         DefaultsKey.notchDownloadsEnabled: true,
         DefaultsKey.notchWatchEnabled: true,
@@ -1541,7 +1547,13 @@ enum Defaults {
         DefaultsKey.notchTrackChange: true,
         DefaultsKey.notchMusicActivity: false,
         DefaultsKey.notchShowInCaptures: true,
-        DefaultsKey.notchLockScreen: false,
+        DefaultsKey.notchLockScreen: true,
+        DefaultsKey.notchLockWeather: true,
+        DefaultsKey.notchLockWeatherCity: "",
+        DefaultsKey.notchLockBattery: true,
+        DefaultsKey.notchFocusEnabled: true,
+        DefaultsKey.notchFocusShortcut: "",
+        DefaultsKey.notchPrivacyEnabled: true,
         DefaultsKey.notchLockSounds: false,
         DefaultsKey.notchMascotEnabled: false,
         DefaultsKey.notchMascotVisits: true,

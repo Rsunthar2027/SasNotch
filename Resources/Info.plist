@@ -74,6 +74,8 @@
 	<string>SasNotch checks local metadata in Downloads to review, organize or trash only confirmed WhatsApp files you choose. The Cleaner also looks for forgotten screenshots when you save screenshots here.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 SasNotch contributors</string>
+	<key>NSLocationUsageDescription</key>
+	<string>SasNotch uses your approximate location only to show the current weather on the lock screen, when no city is set. Only rounded coordinates are sent to Open-Meteo.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>SasNotch records your microphone only when you turn it on for a screen recording. The audio stays on your Mac unless you choose to create a temporary link.</string>
 	<key>NSNetworkVolumesUsageDescription</key>

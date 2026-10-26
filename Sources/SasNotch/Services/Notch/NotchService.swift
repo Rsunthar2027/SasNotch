@@ -1171,6 +1171,9 @@ final class NotchService: ObservableObject {
         syncGestures()
         NotchTimerService.shared.syncWithPreferences()
         NotchAccessoryService.shared.syncWithPreferences()
+        FocusStatusService.shared.syncWithPreferences()
+        PrivacyIndicatorService.shared.syncWithPreferences()
+        WeatherService.shared.syncWithPreferences()
         let signature = NotchEvent.allCases.map { String(NotchSupport.routes($0)) }.joined()
             + NotchSupport.idleContent().rawValue + String(NotchSupport.watchesMusicActivity())
             + String(NotchKeepAwakeSupport.showsActivity())
@@ -1256,6 +1259,8 @@ final class NotchService: ObservableObject {
         running = false
         NotchTimerService.shared.stop()
         NotchAccessoryService.shared.stop()
+        FocusStatusService.shared.stop()
+        PrivacyIndicatorService.shared.stop()
         NotchWatchService.shared.stop()
         let cancelCapture = captureControlsCancel
         endCaptureControls()
@@ -1313,6 +1318,7 @@ final class NotchService: ObservableObject {
         NotchAudioLevelService.shared.stop()
         CameraPreviewService.shared.hideEmbedded()
         NotchAccessoryService.shared.suspend()
+        PrivacyIndicatorService.shared.stop()
         NotchDownloadService.shared.stop()
         NotchCalendarService.shared.stop()
         NotchNotificationService.shared.stop()
@@ -1904,6 +1910,7 @@ final class NotchService: ObservableObject {
         case .control(let item):
             switch item {
             case .keepAwake: KeepAwakeManager.shared.toggle()
+            case .focus: FocusStatusService.shared.toggle()
             case .microphone: MicMuteService.shared.toggle()
             case .screenshot: perform { ScreenshotService.shared.capture() }
             case .recording: perform { ScreenRecorderService.shared.toggle() }
