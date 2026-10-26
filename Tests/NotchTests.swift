@@ -2115,15 +2115,17 @@ enum NotchTests {
         defaults.set(true, forKey: AppFeature.micMute.availabilityKey)
         defaults.set(false, forKey: DefaultsKey.notchTrackChange)
         let initialLayout = NotchQuickAccessConfiguration.current(in: defaults)
-        suite.expect(initialLayout.buttons.filter { $0.side == .left }.compactMap(\.action) == [.explore, .module(.timer)]
+        suite.expect(initialLayout.buttons.filter { $0.side == .left }.compactMap(\.action)
+                        == [.explore, .module(.timer), .control(.keepAwake)]
                && initialLayout.buttons.filter { $0.side == .right }.compactMap(\.action) == [.settings, .module(.mixer)]
                && initialLayout.buttons.filter { $0.side == .bottom }.compactMap(\.action) == [.module(.music)],
-               "a fresh layout places Explore and Timer left, Settings and Mixer right, and music below")
+               "a fresh layout places Explore, Timer and Keep Awake left, Settings and Mixer right, and music below")
         suite.expect(initialLayout == NotchQuickAccessConfiguration.current(in: defaults),
                "default buttons keep stable identities across preference refreshes")
         defaults.set(false, forKey: AppFeature.mixer.availabilityKey)
         defaults.set(false, forKey: AppFeature.notchTimer.availabilityKey)
-        suite.expect(NotchQuickAccessConfiguration.current(in: defaults).actions == [.explore, .settings, .module(.music)]
+        suite.expect(NotchQuickAccessConfiguration.current(in: defaults).actions
+                        == [.explore, .control(.keepAwake), .settings, .module(.music)]
                && !NotchQuickAction.module(.mixer).isAvailable(in: defaults)
                && !NotchQuickAction.control(.mixer).isAvailable(in: defaults),
                "uninstalled utilities leave no default buttons or available mixer actions")
@@ -2134,7 +2136,8 @@ enum NotchTests {
         suite.expect(NotchQuickAccessConfiguration.current(in: defaults) == initialLayout,
                "reinstalled utilities return to their original positions")
         defaults.set("music", forKey: DefaultsKey.notchHiddenModules)
-        suite.expect(NotchQuickAccessConfiguration.current(in: defaults).actions == [.explore, .module(.timer), .settings, .module(.mixer)],
+        suite.expect(NotchQuickAccessConfiguration.current(in: defaults).actions
+                        == [.explore, .module(.timer), .control(.keepAwake), .settings, .module(.mixer)],
                "a section switched off takes its button out of the island")
         var held = NotchQuickAccessConfiguration(side: .left, actions: [.explore, .module(.music), .settings])
         let incoming = NotchQuickButton(action: .control(.panel), side: .right)

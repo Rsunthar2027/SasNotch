@@ -1467,6 +1467,7 @@ struct NotchQuickAccessConfiguration: Equatable, Codable {
     static let initial = Self(buttons: [
         NotchQuickButton(id: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!, action: .explore, side: .left),
         NotchQuickButton(id: UUID(uuidString: "00000000-0000-4000-8000-000000000002")!, action: .module(.timer), side: .left),
+        NotchQuickButton(id: UUID(uuidString: "00000000-0000-4000-8000-000000000006")!, action: .control(.keepAwake), side: .left),
         NotchQuickButton(id: UUID(uuidString: "00000000-0000-4000-8000-000000000003")!, action: .settings, side: .right),
         NotchQuickButton(id: UUID(uuidString: "00000000-0000-4000-8000-000000000004")!, action: .module(.mixer), side: .right),
         NotchQuickButton(id: UUID(uuidString: "00000000-0000-4000-8000-000000000005")!, action: .module(.music), side: .bottom),

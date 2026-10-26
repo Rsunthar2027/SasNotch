@@ -70,7 +70,8 @@ struct NotchQuickAccessView: View {
     @ObservedObject private var awake = KeepAwakeManager.shared
     @ObservedObject private var microphone = MicMuteService.shared
     @ObservedObject private var recorder = ScreenRecorderService.shared
-    @AppStorage(DefaultsKey.notchLiquidGlassEnabled) private var glass = false
+    @State private var choosingAwake = false
+    @AppStorage(DefaultsKey.notchLiquidGlassEnabled) private var glass = true
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -137,8 +138,10 @@ struct NotchQuickAccessView: View {
         default: break
         }
         let title = isBack ? l10n.s.obBack : button.label.isEmpty ? actionTitle : button.label
+        let picksDuration = action == .control(.keepAwake)
         return Button {
-            service.activateQuickAction(action)
+            // Keep Awake asks how long; every other circle acts at once.
+            if picksDuration { choosingAwake = true } else { service.activateQuickAction(action) }
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .medium))
@@ -159,6 +162,9 @@ struct NotchQuickAccessView: View {
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("notch.quickAccess.\(button.id.uuidString)")
+        .popover(isPresented: picksDuration ? $choosingAwake : .constant(false), arrowEdge: .bottom) {
+            NotchKeepAwakePicker { choosingAwake = false }
+        }
     }
 }
 

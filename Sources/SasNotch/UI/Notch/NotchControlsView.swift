@@ -552,10 +552,21 @@ private struct NotchCalendarTile: View {
 private struct NotchAwakeButton: View {
     @ObservedObject private var service = KeepAwakeManager.shared
     @ObservedObject private var l10n = L10n.shared
+    @State private var choosing = false
     var body: some View {
-        NotchActionTile(symbol: service.isActive ? "cup.and.saucer.fill" : "cup.and.saucer",
-                        title: l10n.s.keepAwakeTitle, active: service.isActive,
-                        accent: .awake, action: service.toggle)
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            NotchActionTile(symbol: service.isActive ? "cup.and.saucer.fill" : "cup.and.saucer",
+                            title: l10n.s.keepAwakeTitle,
+                            reading: service.isActive ? service.endDate.map {
+                                NotchKeepAwakeSupport.compactText(until: $0, now: context.date,
+                                                                  locale: Locale(identifier: l10n.language.rawValue))
+                            } : nil,
+                            readingCountsDown: true,
+                            active: service.isActive, accent: .awake) { choosing = true }
+        }
+        .popover(isPresented: $choosing, arrowEdge: .bottom) {
+            NotchKeepAwakePicker { choosing = false }
+        }
     }
 }
 

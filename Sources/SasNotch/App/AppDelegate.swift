@@ -1637,6 +1637,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         pauseItem.isEnabled = paused || AppFeature.notch.isAvailable
         menu.addItem(pauseItem)
 
+        if AppFeature.keepAwake.isAvailable {
+            menu.addItem(.separator())
+            addKeepAwakeItems(to: menu, strings: strings)
+        }
+        menu.addItem(.separator())
+
         let loginItem = NSMenuItem(title: strings.launchAtLogin, action: #selector(menuToggleLaunchAtLogin),
                                    keyEquivalent: "")
         loginItem.target = self
@@ -1684,6 +1690,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     @objc private func menuOpenShelf() {
         ShelfService.shared.expandDocked()
+    }
+
+    /// Keep Awake in the menu: a switch that says how long is left, and the
+    /// durations to start or restart it with, the current one checked.
+    private func addKeepAwakeItems(to menu: NSMenu, strings: Strings) {
+        let awake = KeepAwakeManager.shared
+        var title = awake.isActive ? strings.menuDisableAwake : strings.menuEnableAwake
+        if awake.isActive {
+            let remaining = awake.endDate.map {
+                KeepAwakeText.left(NotchKeepAwakeSupport.compactText(until: $0, now: Date(),
+                                                                     locale: Locale(identifier: L10n.shared.language.rawValue)))
+            } ?? KeepAwakeText.untilOff
+            title += " (\(remaining))"
+        }
+        let toggleItem = NSMenuItem(title: title, action: #selector(menuToggleAwake), keyEquivalent: "")
+        toggleItem.target = self
+        toggleItem.image = NSImage(systemSymbolName: awake.isActive ? "cup.and.saucer.fill" : "cup.and.saucer",
+                                   accessibilityDescription: nil)
+        menu.addItem(toggleItem)
+
+        let durationsItem = NSMenuItem(title: KeepAwakeText.menuFor, action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        let options: [(String, Int)] = [(strings.minutes15, 15), (strings.minutes30, 30),
+                                        (strings.hour1, 60), (strings.hours2, 120),
+                                        (strings.hours4, 240), (strings.hours8, 480),
+                                        (strings.indefinitely, 0)]
+        for (label, minutes) in options {
+            let item = NSMenuItem(title: label, action: #selector(menuActivateDuration(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = minutes
+            let current = awake.isActive && awake.sessionMinutes == minutes && (minutes == 0) == (awake.endDate == nil)
+            item.state = current ? .on : .off
+            submenu.addItem(item)
+        }
+        durationsItem.submenu = submenu
+        menu.addItem(durationsItem)
     }
 
     @objc private func menuTogglePause() {
