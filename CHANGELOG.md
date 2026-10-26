@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-26
+
 ### Added
 - The island's Calendar page lists the reminders due today, and overdue ones, under your events. Tick one off to complete it in Reminders. Switch it off in Settings › Dynamic Island › Calendar.
 - Reminders joins the first-launch permissions screen.
