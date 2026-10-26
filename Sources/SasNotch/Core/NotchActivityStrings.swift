@@ -68,7 +68,7 @@ extension FeatureStrings {
             finished: "Time is up",
             soundEnabled: "Play sound when time is up",
             hideTimerCountdown: "Hide timer countdown",
-            camera: "Camera mirror",
+            camera: "Mirror",
             cameraUnavailable: "The camera could not start. Try opening it again.",
             cameraHint: "Open a live mirror here. The camera stops when you leave this view.",
             startCamera: "Open camera",

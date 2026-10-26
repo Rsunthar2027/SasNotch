@@ -721,8 +721,12 @@ enum FeatureCatalogTests {
             of: additionalPermissionsAlignment,
             options: .regularExpression) != nil,
                "the additional onboarding permission rows share one leading edge")
-        suite.expect(FeaturePreset.essential.features.flatMap(\.onboardingPermissions).isEmpty,
-               "the essential first-run choice asks for no broad permission")
+        suite.expect(Set(FeaturePreset.essential.features.flatMap(\.onboardingPermissions))
+                .isSubset(of: [.accessibility, .screenRecording]),
+               "SasNotch's first-run set asks only for the permissions its single onboarding screen explains")
+        suite.expect(FeaturePreset.essential.features.contains(.notch)
+                && FeaturePreset.essential.enableKeys.contains(DefaultsKey.notchEnabled),
+               "the island is installed and switched on from the first launch")
         suite.expect(Set(FeaturePreset.windows.features.flatMap(\.onboardingPermissions))
                 == [.accessibility, .screenRecording],
                "the windows first-run choice explains exactly its two broad permissions")

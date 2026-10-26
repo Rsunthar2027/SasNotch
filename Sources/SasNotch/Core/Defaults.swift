@@ -947,6 +947,7 @@ enum DefaultsKey {
     static let notchLockWeatherCity = "notchLockWeatherCity"
     static let notchLockBattery = "notchLockBattery"
     static let notchFocusEnabled = "notchFocusEnabled"
+    static let islandPaused = "islandPaused"
     static let notchFocusShortcut = "notchFocusShortcut"
     static let notchPrivacyEnabled = "notchPrivacyEnabled"
     static let notchLockSounds = "notchLockSounds" // padlock sounds as the Mac locks and unlocks
@@ -1552,6 +1553,7 @@ enum Defaults {
         DefaultsKey.notchLockWeatherCity: "",
         DefaultsKey.notchLockBattery: true,
         DefaultsKey.notchFocusEnabled: true,
+        DefaultsKey.islandPaused: false,
         DefaultsKey.notchFocusShortcut: "",
         DefaultsKey.notchPrivacyEnabled: true,
         DefaultsKey.notchLockSounds: false,

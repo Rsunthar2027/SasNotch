@@ -424,6 +424,48 @@ final class Permissions: ObservableObject {
     enum AutomationTarget: String, CaseIterable {
         case finder = "com.apple.finder"
         case terminal = "com.apple.Terminal"
+        case music = "com.apple.Music"
+    }
+
+    /// Asks macOS for permission to control the Music app, which it only does
+    /// while Music runs: Music opens hidden first if it is not running. Call
+    /// from the main thread; the answer arrives on the main thread.
+    func requestMusicAutomation(completion: @escaping (AutomationStatus) -> Void) {
+        let bundleID = AutomationTarget.music.rawValue
+        func ask() {
+            DispatchQueue.global(qos: .userInitiated).async {
+                var descriptor = AEAddressDesc()
+                let created = bundleID.withCString { pointer in
+                    AECreateDesc(typeApplicationBundleID, pointer, bundleID.utf8.count, &descriptor)
+                }
+                var status: AutomationStatus = .notDeterminable
+                if created == noErr {
+                    switch AEDeterminePermissionToAutomateTarget(&descriptor, typeWildCard, typeWildCard, true) {
+                    case noErr: status = .granted
+                    case OSStatus(errAEEventNotPermitted): status = .denied
+                    case OSStatus(errAEEventWouldRequireUserConsent): status = .undetermined
+                    default: status = .notDeterminable
+                    }
+                    AEDisposeDesc(&descriptor)
+                }
+                DispatchQueue.main.async { completion(status) }
+            }
+        }
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty {
+            ask()
+            return
+        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            completion(.notDeterminable)
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        configuration.hides = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in
+            // Music needs a moment before it answers Apple Events.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { ask() }
+        }
     }
 
     enum AutomationStatus {

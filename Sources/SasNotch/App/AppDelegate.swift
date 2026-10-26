@@ -113,9 +113,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         PanelLayout.resetCollapsedSectionsOnce(for: "2.15.1")
 
         statusController = StatusItemController()
+        // The island holds what the old panel showed; the icon opens a short menu.
         statusController.onLeftClick = { [weak self] in
-            self?.captureStatusClick()
-            self?.toggleMainPopover()
+            self?.presentContextMenu(from: self?.statusController.button)
         }
         statusController.onRightClick = { [weak self] button in
             if AppFeature.keepAwake.isAvailable
@@ -1618,67 +1618,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     private func presentContextMenu(from button: NSStatusBarButton?) {
-        let manager = KeepAwakeManager.shared
         let strings = L10n.shared.s
         let menu = NSMenu()
 
-        if AppFeature.keepAwake.isAvailable {
-            let toggleItem = NSMenuItem(title: manager.isActive ? strings.menuDisableAwake : strings.menuEnableAwake,
-                                        action: #selector(menuToggleAwake),
-                                        keyEquivalent: "")
-            toggleItem.target = self
-            menu.addItem(toggleItem)
-        }
-
-        if AppFeature.keepAwake.isAvailable, !manager.isActive {
-            let durationsItem = NSMenuItem(title: strings.menuActivateFor, action: nil, keyEquivalent: "")
-            let submenu = NSMenu()
-            let options: [(String, Int)] = [(strings.minutes15, 15), (strings.minutes30, 30),
-                                            (strings.hour1, 60), (strings.hours2, 120),
-                                            (strings.hours4, 240), (strings.hours8, 480),
-                                            (strings.indefinitely, 0)]
-            for (label, minutes) in options {
-                let item = NSMenuItem(title: label, action: #selector(menuActivateDuration(_:)), keyEquivalent: "")
-                item.target = self
-                item.tag = minutes
-                submenu.addItem(item)
-            }
-            durationsItem.submenu = submenu
-            menu.addItem(durationsItem)
-        }
-
-        if AppFeature.cleaningMode.isAvailable {
-            let cleaningItem = NSMenuItem(title: strings.cleaningMenuItem,
-                                          action: #selector(menuCleaningMode), keyEquivalent: "")
-            cleaningItem.target = self
-            menu.addItem(cleaningItem)
-        }
-
-        if menu.items.isEmpty == false {
-            menu.addItem(.separator())
-        }
+        let aboutItem = NSMenuItem(title: strings.menuAbout, action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+        menu.addItem(.separator())
 
         let settingsItem = NSMenuItem(title: strings.menuSettings, action: #selector(menuOpenSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
 
-        let aboutItem = NSMenuItem(title: strings.menuAbout, action: #selector(showAbout), keyEquivalent: "")
-        aboutItem.target = self
-        menu.addItem(aboutItem)
+        let paused = IslandPause.isPaused()
+        let pauseItem = NSMenuItem(title: paused ? MenuText.resume : MenuText.pause,
+                                   action: #selector(menuTogglePause), keyEquivalent: "")
+        pauseItem.target = self
+        pauseItem.isEnabled = paused || AppFeature.notch.isAvailable
+        menu.addItem(pauseItem)
 
-        if AppFeature.uninstaller.isAvailable {
-            let uninstallItem = NSMenuItem(title: strings.uninstallerMenuItem,
-                                           action: #selector(menuOpenUninstaller), keyEquivalent: "")
-            uninstallItem.target = self
-            menu.addItem(uninstallItem)
-        }
-
-        if AppFeature.shelf.isAvailable, UserDefaults.standard.bool(forKey: DefaultsKey.shelfEnabled) {
-            let shelfItem = NSMenuItem(title: strings.shelfMenuItem,
-                                       action: #selector(menuOpenShelf), keyEquivalent: "")
-            shelfItem.target = self
-            menu.addItem(shelfItem)
-        }
+        let loginItem = NSMenuItem(title: strings.launchAtLogin, action: #selector(menuToggleLaunchAtLogin),
+                                   keyEquivalent: "")
+        loginItem.target = self
+        loginItem.state = LaunchAtLogin.isEnabled ? .on : .off
+        menu.addItem(loginItem)
 
         let updatesItem = NSMenuItem(title: strings.menuCheckUpdates, action: #selector(menuCheckUpdates), keyEquivalent: "")
         updatesItem.target = self
@@ -1721,6 +1684,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     @objc private func menuOpenShelf() {
         ShelfService.shared.expandDocked()
+    }
+
+    @objc private func menuTogglePause() {
+        IslandPause.toggle()
+    }
+
+    @objc private func menuToggleLaunchAtLogin() {
+        LaunchAtLogin.setEnabled(!LaunchAtLogin.isEnabled) { _, _ in
+            NotificationCenter.default.post(name: LaunchAtLoginSupport.settingsRefreshRequested, object: nil)
+        }
     }
 
     @objc private func menuCheckUpdates() {
@@ -2159,7 +2132,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             window.makeKeyAndOrderFront(nil)
             return
         }
-        let host = NSHostingController(rootView: OnboardingView(mode: mode) { [weak self] in
+        // A first launch installs SasNotch's defaults right away, so the
+        // island works while the permissions are being granted.
+        if !UserDefaults.standard.bool(forKey: DefaultsKey.hasOnboarded) {
+            FeatureRuntime.shared.replaceAvailable(with: FeaturePreset.essential.features,
+                                                   enabling: FeaturePreset.essential.enableKeys)
+        }
+        let host = NSHostingController(rootView: SasNotchOnboardingView { [weak self] in
             self?.markOnboardingComplete()
             self?.onboardingWindow?.close()
         })

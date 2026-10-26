@@ -31,9 +31,16 @@ enum FeaturePreset: String, CaseIterable, Identifiable {
     var features: Set<AppFeature> {
         switch self {
         case .essential:
-            return [.mixer, .keepAwake,
-                    .monitorCPU, .monitorGPU, .monitorMemory,
-                    .monitorNetwork, .monitorDisk, .monitorPower]
+            // SasNotch's defaults: the island with its everyday extensions and
+            // the utilities it is known for. Features that change how the
+            // mouse, keyboard or windows behave stay out until chosen.
+            return Set([.notch] + AppFeature.dynamicIslandInitialExtensions)
+                .union([.mixer, .micMute, .keepAwake, .brightness,
+                        .monitorCPU, .monitorGPU, .monitorMemory,
+                        .monitorNetwork, .monitorDisk, .monitorPower,
+                        .switcher, .windowLayout, .dockPreview,
+                        .clipboardHistory, .textSnippets, .finderCutPaste, .shelf,
+                        .uninstaller, .colorPicker, .cameraPreview])
         case .windows:
             return [.switcher, .windowLayout, .dockPreview, .dockClick, .windowMaximizer]
         case .battery:
@@ -48,7 +55,12 @@ enum FeaturePreset: String, CaseIterable, Identifiable {
     /// Presets whose features are on-demand need none.
     var enableKeys: [String] {
         switch self {
-        case .essential, .battery:
+        case .essential:
+            return [DefaultsKey.notchEnabled, DefaultsKey.switcherEnabled, DefaultsKey.dockPreviewEnabled,
+                    DefaultsKey.clipboardHistoryEnabled, DefaultsKey.textSnippetsEnabled,
+                    DefaultsKey.finderCutPasteEnabled, DefaultsKey.shelfEnabled,
+                    DefaultsKey.brightnessControlEnabled]
+        case .battery:
             return []
         case .windows:
             return [DefaultsKey.switcherEnabled,
