@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  Free and open source · Apple Silicon · macOS 14 or later<br>
+  Free and open source · Apple Silicon · macOS 14 or later · <a href="https://sasnotch.vercel.app">Website</a><br>
   First time opening it? See <a href="#first-launch-apple-could-not-verify-sasnotch">how to get past the security warning</a>.
 </p>
 
