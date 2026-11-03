@@ -128,6 +128,7 @@ struct MetricsTests {
             ("timer-presets", { NotchTimerPresetTests.run(suite) }),
             ("switcher-model", { SwitcherModelFeatureTests.run(suite) }),
             ("agents", { NotchAgentTests.run(suite) }),
+            ("mirror-selfie", { MirrorSelfieTests.run(suite) }),
             ("features", {
                 FeatureCatalogTests.run(suite)
                 MenuPanelSectionGateContract.run(suite)

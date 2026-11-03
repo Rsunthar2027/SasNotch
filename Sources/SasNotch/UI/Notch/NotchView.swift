@@ -578,7 +578,10 @@ struct NotchView: View {
             case .timer: NotchTimerView(size: pageSize)
             case .camera:
                 NotchCameraView(size: pageSize)
-                    .notchBand(leading: { NotchCameraChooser() }, trailing: { NotchCameraStopButton() })
+                    .notchBand(leading: { NotchCameraChooser() }, trailing: {
+                        NotchCameraShutterButton()
+                        NotchCameraStopButton()
+                    })
             case .notifications:
                 NotchNotificationsView(size: pageSize)
                     .notchBand(trailing: { NotchClearNotificationsButton() })

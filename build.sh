@@ -315,6 +315,7 @@ if (( TEST )); then
         Sources/SasNotch/Services/LiveActivities/LiveActivitySupport.swift
         Sources/SasNotch/Services/Notch/NotchAccessoryConnectionMonitor.swift
         Sources/SasNotch/Services/QuickTools/CameraPreviewSupport.swift
+        Sources/SasNotch/Services/QuickTools/MirrorSelfieSupport.swift
         Sources/SasNotch/Core/NotchMusicExtrasStrings.swift
         Sources/SasNotch/Core/NotchClipboardSizeStrings.swift
         Sources/SasNotch/Services/Notch/NotchLyricsSupport.swift

@@ -31,6 +31,7 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchTimerSoundEnabled) private var timerSoundEnabled = true
     @AppStorage(DefaultsKey.notchHideTimerCountdown) private var hideTimerCountdown = false
     @AppStorage(DefaultsKey.notchCameraEnabled) private var cameraEnabled = true
+    @AppStorage(DefaultsKey.notchSelfieSavesToDownloads) private var selfieSavesToDownloads = false
     @AppStorage(DefaultsKey.notchAccessoriesEnabled) private var accessoriesEnabled = true
     @AppStorage(DefaultsKey.notchCalendarEnabled) private var calendarEnabled = true
     @AppStorage(DefaultsKey.notchCalendarCountdown) private var calendarCountdown = false
@@ -547,6 +548,8 @@ struct NotchSettings: View {
                 Button(l10n.s.permissionRequest, action: permissions.requestCamera)
                 Button(l10n.s.permissionOpenSettings, action: permissions.openCameraSettings)
             }
+            switchRow("square.and.arrow.down", MirrorSelfieText.saveToDownloads,
+                      caption: MirrorSelfieText.saveToDownloadsCaption, isOn: $selfieSavesToDownloads)
         case .files:
             destination(text.files, symbol: "tray.full", value: $shelfWindow, available: AppFeature.shelf.isAvailable)
             if shelfWindow { switchRow("hand.draw", text.dragReveal, isOn: $dragReveal) }
