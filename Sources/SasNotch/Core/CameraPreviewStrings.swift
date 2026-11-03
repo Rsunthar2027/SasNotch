@@ -49,7 +49,7 @@ extension CameraPreviewFeatureStrings {
         deniedMessage: "Camera access for SasNotch is turned off in System Settings.",
         noCameraMessage: "No camera detected",
         permName: "Camera",
-        permExplain: "Shows your camera only in the preview window, so you can check how you look before a call. Nothing is recorded or leaves your Mac."
+        permExplain: "Shows your camera only in the preview window, so you can check how you look before a call. A photo is taken only when you press the selfie button, and it stays on your Mac."
     )
 
     static let ptBR = CameraPreviewFeatureStrings(
