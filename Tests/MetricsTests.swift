@@ -127,6 +127,7 @@ struct MetricsTests {
                 NotchPresentationProbeArgumentTests.run(suite)
             }),
             ("timer-presets", { NotchTimerPresetTests.run(suite) }),
+            ("terminal", { NotchTerminalTests.run(suite) }),
             ("switcher-model", { SwitcherModelFeatureTests.run(suite) }),
             ("agents", { NotchAgentTests.run(suite) }),
             ("mirror-selfie", { MirrorSelfieTests.run(suite) }),

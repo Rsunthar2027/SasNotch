@@ -170,6 +170,7 @@ struct NotchPagePreview: View {
         case .system: NotchSystemView(size: size) { _ in }
         case .tools: QuickLauncherView(notchSize: size)
         case .scratchpad: NotchScratchpadStill()
+        case .terminal: NotchTerminalView(service: notch, size: size)
         case .agents:
             // Off, nothing reads the logs, so the page would wait forever.
             if NotchAgentSupport.isEnabled() {
@@ -405,6 +406,7 @@ extension NotchModule {
         case .downloads: return .blue
         case .scratchpad: return .yellow
         case .agents: return Color(red: 0.85, green: 0.47, blue: 0.34)
+        case .terminal: return Color(red: 0.22, green: 0.24, blue: 0.27)
         }
     }
 

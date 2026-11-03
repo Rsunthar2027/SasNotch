@@ -93,6 +93,8 @@ struct NotchEditorStrings {
         case .downloads: return downloadsSummary
         case .scratchpad: return scratchpadSummary
         case .agents: return agentsSummary
+        // English only, like the rest of the terminal.
+        case .terminal: return NotchTerminalText.summary
         }
     }
 }

@@ -590,6 +590,8 @@ struct NotchSettings: View {
             destination(FeatureStrings.scratchpad(l10n.language).pageTitle, symbol: "note.text", value: $scratchpad)
         case .agents:
             NotchAgentsSettingsControls()
+        case .terminal:
+            Text(NotchTerminalText.settingsCaption).font(.callout).foregroundStyle(.secondary)
         case .mixer, .system, .tools:
             EmptyView()
         }
@@ -991,6 +993,7 @@ struct NotchSettings: View {
         case .downloads: return .notchDownloads
         case .scratchpad: return .scratchpad
         case .agents: return .notchAgents
+        case .terminal: return .notchTerminal
         }
     }
 
