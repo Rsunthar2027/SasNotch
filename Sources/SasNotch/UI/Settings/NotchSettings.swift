@@ -119,6 +119,7 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchHapticFeedback) private var hapticFeedback = true
     @AppStorage(DefaultsKey.notchTranslucentBackground) private var translucentBackground = true
     @AppStorage(DefaultsKey.notchLiquidGlassEnabled) private var liquidGlass = false
+    @AppStorage(DefaultsKey.notchGlassStyle) private var glassStyle = NotchGlassStyle.fallback.rawValue
     @AppStorage(DefaultsKey.notchShelf) private var shelfWindow = true
     @AppStorage(DefaultsKey.notchDragReveal) private var dragReveal = true
     @AppStorage(DefaultsKey.notchCaptureControls) private var captureControls = true
@@ -162,7 +163,7 @@ struct NotchSettings: View {
          String(microphone), String(battery), String(clipboard), String(clipboardWindow), clipboardCardSize,
          String(capture), String(trackChange), captureAction, String(showInCaptures),
          String(returnHome), homeModule, String(opensActivity), String(scratchpad),
-         String(agentsEnabled), String(keepAwakeActivity), String(shortcutEnabled)]
+         String(agentsEnabled), String(keepAwakeActivity), String(shortcutEnabled), glassStyle]
     }
 
     private var access: Binding<NotchQuickAccessConfiguration> {

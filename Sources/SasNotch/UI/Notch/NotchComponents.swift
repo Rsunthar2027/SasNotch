@@ -22,7 +22,7 @@ struct NotchButtonStyle: ButtonStyle {
         configuration.label
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.white.opacity(active && highlights ? 0.09 : 0))
+                    .fill(.primary.opacity(active && highlights ? 0.09 : 0))
                     .allowsHitTesting(false)
             }
             .opacity(enabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
@@ -60,13 +60,13 @@ struct NotchLiveEqualizerBars: View {
 struct NotchMeter: View {
     let value: Double
     var height: CGFloat = 5
-    var tint: Color = .white
+    var tint: Color = .primary
 
     var body: some View {
         let fraction = value.isFinite ? min(1, max(0, value)) : 0
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule(style: .continuous).fill(.white.opacity(0.14))
+                Capsule(style: .continuous).fill(.primary.opacity(0.14))
                 Capsule(style: .continuous)
                     .fill(tint.opacity(0.9))
                     .frame(width: max(fraction > 0 ? height : 0, proxy.size.width * fraction))
@@ -146,22 +146,32 @@ struct NotchIconButton: View {
     let symbol: String
     let title: String
     var selected = false
+    /// The lens this button morphs from and into on glass; its symbol by default.
+    var glassID: String? = nil
     let action: () -> Void
+    @Environment(\.notchGlassSurface) private var glassSurface
+    @Environment(\.notchGlassNamesBySymbol) private var namesBySymbol
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        // On glass the button is its own round lens, as Apple's toolbar
+        // buttons are, and the glass flexes under the pointer instead of the
+        // button lifting.
+        let radius: CGFloat = glassSurface ? 14 : 9
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(selected ? .white : .white.opacity(0.55))
+                .font(.callout.weight(.medium))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(selected ? .primary : .secondary)
                 .contentTransition(.symbolEffect(.replace))
                 .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: symbol)
                 .frame(width: 28, height: 28)
-                .background(.white.opacity(selected ? 0.12 : 0),
-                            in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .notchGlass(RoundedRectangle(cornerRadius: radius, style: .continuous),
+                            offGlass: selected ? 0.12 : 0, tint: selected ? NotchGlassTint.selection : nil,
+                            selected: selected, id: glassID ?? (namesBySymbol ? symbol : nil))
+                .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         }
-        .buttonStyle(NotchButtonStyle(cornerRadius: 9))
+        .buttonStyle(NotchButtonStyle(cornerRadius: radius, lifts: !glassSurface))
         .help(title)
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -173,9 +183,12 @@ struct NotchIconButton: View {
 struct NotchSectionsButton: View {
     let action: () -> Void
     @ObservedObject private var l10n = L10n.shared
+    /// The way back from the sections and from a detail take this lens over.
+    static let glassID = "notch.band.sections"
 
     var body: some View {
-        NotchIconButton(symbol: "square.grid.2x2", title: FeatureStrings.notch(l10n.language).sectionsTitle, action: action)
+        NotchIconButton(symbol: "square.grid.2x2", title: FeatureStrings.notch(l10n.language).sectionsTitle,
+                        glassID: Self.glassID, action: action)
     }
 }
 
@@ -207,16 +220,17 @@ struct NotchEmptyView<Actions: View>: View {
 
     private var glyph: some View {
         Image(systemName: symbol)
-            .font(.system(size: 26, weight: .light))
-            .foregroundStyle(.white.opacity(0.65))
+            .font(.largeTitle.weight(.light))
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.secondary)
             .frame(width: 56, height: 56)
-            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .accessibilityHidden(true)
     }
 
     private var label: some View {
         Text(message)
-            .font(.system(size: 12))
+            .font(.callout)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -234,19 +248,21 @@ struct NotchPillButton: View {
     let title: String
     var prominent = false
     let action: () -> Void
+    @Environment(\.notchGlassSurface) private var glassSurface
 
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: prominent ? .semibold : .medium))
-                .foregroundStyle(.white.opacity(prominent ? 1 : 0.7))
+                .font(.callout.weight(prominent ? .semibold : .medium))
+                .foregroundStyle(prominent ? .primary : .secondary)
                 .lineLimit(1)
                 .padding(.horizontal, 14)
                 .frame(height: 28)
-                .background(.white.opacity(prominent ? 0.14 : 0), in: Capsule())
+                .notchGlass(Capsule(), offGlass: prominent ? 0.14 : 0,
+                            tint: prominent ? NotchGlassTint.selection : nil, selected: prominent)
                 .contentShape(Capsule())
         }
-        .buttonStyle(NotchButtonStyle(cornerRadius: 14))
+        .buttonStyle(NotchButtonStyle(cornerRadius: 14, lifts: !glassSurface))
     }
 }
 
@@ -277,7 +293,7 @@ struct NotchArtwork: View {
         .clipShape(RoundedRectangle(cornerRadius: size * 0.19, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: size * 0.19, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                .strokeBorder(.primary.opacity(0.12), lineWidth: 0.5)
         }
         .accessibilityHidden(true)
     }
@@ -365,16 +381,7 @@ struct NotchRail<Item: Identifiable, Content: View>: View {
     }
 }
 
-private struct NotchGlassSurfaceKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
 extension EnvironmentValues {
-    var notchGlassSurface: Bool {
-        get { self[NotchGlassSurfaceKey.self] }
-        set { self[NotchGlassSurfaceKey.self] = newValue }
-    }
-
     /// A page drawn in Settings to preview the island. It shows what the
     /// island shows but must leave the island's state and the keyboard alone.
     var notchSettingsPreview: Bool {
@@ -488,6 +495,9 @@ final class NotchBackdropPresentation: ObservableObject {
     /// The camera strip's height in points, which the translucent background
     /// keeps black at every island height.
     @Published var stripHeight: CGFloat = 0
+    /// The part of that strip Liquid Glass keeps black: the camera housing's,
+    /// on a display that has one.
+    @Published var seamHeight: CGFloat = 0
     @Published private(set) var fade = NotchGlassFade.open
     /// The menu bar a floating capsule leaves below itself, part of the
     /// surface height a fade is planned in.
@@ -529,18 +539,25 @@ struct NotchBackdropShape: Shape {
 struct NotchWindowBackground: View {
     @ObservedObject var presentation: NotchBackdropPresentation
     @AppStorage(DefaultsKey.notchLiquidGlassEnabled) private var glass = false
+    @AppStorage(DefaultsKey.notchGlassStyle) private var glassStyle = NotchGlassStyle.fallback.rawValue
     @AppStorage(DefaultsKey.notchTranslucentBackground) private var translucent = true
 
     var body: some View {
-        NotchSurfaceBackground(presentation: presentation, glass: glass, translucent: translucent)
+        NotchSurfaceBackground(presentation: presentation, glass: glass, translucent: translucent,
+                               style: NotchGlassStyle.sanitized(glassStyle))
     }
 }
 
-/// Keep the upper content dark and open the lower surface into a refractive lip.
+/// The open island's surface. On macOS 26 with Liquid Glass it is Apple's own
+/// glass in the island's shape, lensing and lighting what lies behind it,
+/// with black kept only over the camera housing. Otherwise it is the frosted
+/// blur or plain black, both dark.
 struct NotchSurfaceBackground: View {
     @ObservedObject var presentation: NotchBackdropPresentation
     let glass: Bool
     var translucent = false
+    var style: NotchGlassStyle = .fallback
+    @ObservedObject private var appearance = NotchSystemAppearance.shared
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -556,6 +573,10 @@ struct NotchSurfaceBackground: View {
         translucent && !offersGlass && presentation.usesGlass && !reduceTransparency
     }
 
+    /// The glass takes the app's light or dark appearance, as the island's
+    /// content on it does; black and frosted stay dark.
+    private var scheme: ColorScheme { showsGlass ? appearance.scheme : .dark }
+
     var body: some View {
         ZStack {
             // The black the island rests in stays beneath the glass until
@@ -567,37 +588,42 @@ struct NotchSurfaceBackground: View {
             if #available(macOS 26, *), showsGlass, presentation.restingBlack < 1 {
                 let shape = NotchBackdropShape(contour: presentation.contour)
                 Color.clear
-                    .glassEffect(.clear, in: shape)
+                    .glassEffect(surfaceGlass, in: shape)
                     .environment(\.appearsActive, true)
                     .materialActiveAppearance(.active)
-                    .overlay {
-                        LinearGradient(stops: Self.shade(openness: presentation.openness, contrast: contrast),
-                                       startPoint: .top, endPoint: .bottom)
-                            .frame(height: presentation.contourBottom)
-                            .frame(maxHeight: .infinity, alignment: .top)
-                            .mask(shape)
-                    }
+                    .overlay { seam.mask(shape) }
             }
 #endif
             if showsTranslucent, presentation.restingBlack < 1 {
                 translucentOrBlack
             }
         }
-        .environment(\.colorScheme, .dark)
+        .environment(\.colorScheme, scheme)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
-    /// The dimming over the glass, from the top of the island to its lip. Near
-    /// a black strip the lip closes up, so the last frames of a collapse
-    /// already match the resting island.
-    static func shade(openness: Double, contrast: ColorSchemeContrast) -> [Gradient.Stop] {
-        (0...64).map { index in
-            let t = Double(index) / 64
-            return Gradient.Stop(
-                color: .black.opacity(1 - openness * (contrast == .increased ? 0.10 : 0.45) * pow(t, 2.5)),
-                location: t)
-        }
+#if compiler(>=6.2)
+    /// Increase Contrast lays a more opaque tint of the glass's own tone over
+    /// it; otherwise the glass is untinted, as Apple draws its surfaces.
+    @available(macOS 26, *)
+    private var surfaceGlass: Glass {
+        let opacity = NotchGlassContrast.surfaceTintOpacity(increasedContrast: contrast == .increased)
+        guard opacity > 0 else { return style.glass }
+        return style.glass.tint((scheme == .dark ? Color.black : Color.white).opacity(opacity))
+    }
+#endif
+
+    /// Black over the physical camera, so the open island meets the housing
+    /// as the resting one does, released just below it. While the glass
+    /// opens or closes the rest stays dark with the resting black.
+    private var seam: some View {
+        let stops = NotchGlassSeam.stops(height: presentation.contourBottom, seamHeight: presentation.seamHeight,
+                                         openness: presentation.openness)
+            .map { Gradient.Stop(color: .black.opacity($0.opacity), location: $0.location) }
+        return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
+            .frame(height: presentation.contourBottom)
+            .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
@@ -683,8 +709,10 @@ private final class NotchTranslucentView: NSVisualEffectView {
     }
 }
 
-/// Controls on the glass shell use quiet translucent fills, leaving the
-/// refraction to the island rather than stacking separate glass lenses.
+/// A card or tile on the island. On the open island's Liquid Glass it is a
+/// lens of Apple's interactive glass, its corners concentric with the
+/// island's, tinted only while it is selected. Elsewhere it keeps the quiet
+/// fills the black and frosted islands draw.
 struct NotchControlSurface: ViewModifier {
     let cornerRadius: CGFloat
     var selected = false
@@ -693,33 +721,38 @@ struct NotchControlSurface: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.notchGlassSurface) private var glassSurface
+    @Environment(\.notchTileRadius) private var tileRadius
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        // Reduce Transparency paints the grey the white makes over the black island.
+        let share = selected ? 0.12 : 0.065
+        let fill = reduceTransparency ? Color(white: share) : Color.white.opacity(share)
         Group {
             if glassSurface {
                 content
-                    .background(.white.opacity(selected ? 0.11 : 0.045), in: shape)
-                    .overlay {
-                        shape.strokeBorder(.white.opacity(selected ? 0.16 : 0.065), lineWidth: 0.5)
-                            .allowsHitTesting(false)
-                    }
+                    .notchGlass(RoundedRectangle(cornerRadius: min(cornerRadius, tileRadius), style: .continuous),
+                                offGlass: selected ? 0.11 : 0.045, offGlassStroke: selected ? 0.16 : 0.065,
+                                tint: selected ? NotchGlassTint.selection : nil, interactive: interactive,
+                                selected: selected)
             } else {
 #if compiler(>=6.2)
                 if #available(macOS 26, *), glass, !reduceTransparency {
-                    content.background(.white.opacity(selected ? 0.12 : 0.065), in: shape)
+                    content.background(fill, in: shape)
                         .glassEffect(.regular.interactive(interactive), in: shape)
                 } else {
-                    content.background(.white.opacity(selected ? 0.12 : 0.065), in: shape)
+                    content.background(fill, in: shape)
                 }
 #else
-                content.background(.white.opacity(selected ? 0.12 : 0.065), in: shape)
+                content.background(fill, in: shape)
 #endif
             }
         }
         .overlay {
-            shape.strokeBorder(.white.opacity(contrast == .increased ? 0.5 : 0), lineWidth: 0.75)
-                .allowsHitTesting(false)
+            if !glassSurface {
+                shape.strokeBorder(.white.opacity(contrast == .increased ? 0.5 : 0), lineWidth: 0.75)
+                    .allowsHitTesting(false)
+            }
         }
     }
 }
@@ -764,22 +797,25 @@ struct NotchBandBackButton: View {
     let title: String
     let action: () -> Void
     @ObservedObject private var l10n = L10n.shared
+    @Environment(\.notchGlassSurface) private var glassSurface
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .lineLimit(1)
             }
-            .padding(.horizontal, 7)
+            .padding(.horizontal, glassSurface ? 10 : 7)
             .frame(height: 28)
+            // It stands where the sections button stood, and takes its lens.
+            .notchGlass(Capsule(), id: NotchSectionsButton.glassID)
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
-        .buttonStyle(NotchButtonStyle(cornerRadius: 9))
+        .buttonStyle(NotchButtonStyle(cornerRadius: glassSurface ? 14 : 9, lifts: !glassSurface))
         .help(l10n.s.obBack)
         .accessibilityLabel(l10n.s.obBack)
         .accessibilityValue(title)
@@ -792,19 +828,21 @@ struct NotchBandMenuLabel: View {
     let title: String
     var symbol: String? = nil
     var truncation: Text.TruncationMode = .tail
+    @Environment(\.notchGlassSurface) private var glassSurface
 
     var body: some View {
         HStack(spacing: 4) {
             if let symbol {
-                Image(systemName: symbol).foregroundStyle(.white.opacity(0.55))
+                Image(systemName: symbol).symbolRenderingMode(.hierarchical).foregroundStyle(.secondary)
             }
             Text(title).lineLimit(1).truncationMode(truncation)
             Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
         }
-        .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(.white.opacity(0.85))
-        .padding(.horizontal, 7)
+        .font(.callout.weight(.medium))
+        .foregroundStyle(.primary)
+        .padding(.horizontal, glassSurface ? 10 : 7)
         .frame(height: 28)
+        .notchGlass(Capsule())
         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 }
@@ -870,8 +908,10 @@ final class NotchMenuAnchor: NSObject {
     private func menu(_ items: [NotchMenuItem]) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
-        // The island is dark whatever the system is, so its menus are too.
-        menu.appearance = NSAppearance(named: .darkAqua)
+        // A menu takes the appearance of the surface it opens from: dark on
+        // the black and frosted islands and beside the camera, the system's
+        // on Liquid Glass.
+        menu.appearance = view?.effectiveAppearance ?? NSAppearance(named: .darkAqua)
         for item in items {
             guard !item.isSeparator else { menu.addItem(.separator()); continue }
             let entry = NSMenuItem(title: item.title, action: nil, keyEquivalent: "")

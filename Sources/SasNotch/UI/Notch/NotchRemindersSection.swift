@@ -24,19 +24,19 @@ struct NotchRemindersSection: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Image(systemName: "checklist").font(.system(size: 11, weight: .semibold))
-            Text(RemindersText.title).font(.system(size: 12, weight: .semibold))
+            Image(systemName: "checklist").font(.subheadline.weight(.semibold))
+            Text(RemindersText.title).font(.callout.weight(.semibold))
             if reminders.hasAccess, !reminders.reminders.isEmpty {
                 Text("\(reminders.reminders.count)")
                     .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
             if reminders.hasAccess {
-                Text(RemindersText.today).font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                Text(RemindersText.today).font(.subheadline).foregroundStyle(.secondary)
             }
         }
-        .foregroundStyle(.white.opacity(0.85))
+        .foregroundStyle(.primary)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
@@ -46,8 +46,8 @@ struct NotchRemindersSection: View {
             access
         } else if reminders.reminders.isEmpty {
             Text(RemindersText.none)
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.5))
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 .frame(height: rowHeight, alignment: .leading)
         } else {
             let rows = min(reminders.reminders.count, visibleRows)
@@ -65,18 +65,18 @@ struct NotchRemindersSection: View {
         HStack(spacing: 8) {
             Text(reminders.access == .denied || reminders.access == .restricted
                  ? RemindersText.denied : RemindersText.allow)
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.6))
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 4)
             if reminders.access == .denied || reminders.access == .restricted {
                 Button(RemindersText.openSettings, action: reminders.openSettings)
                     .buttonStyle(NotchButtonStyle(cornerRadius: 8))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
             } else {
                 Button(RemindersText.allowButton, action: reminders.requestAccess)
                     .buttonStyle(NotchButtonStyle(cornerRadius: 8))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .disabled(reminders.requesting)
             }
         }
@@ -98,8 +98,8 @@ struct NotchRemindersSection: View {
             Button { reminders.openRemindersApp() } label: {
                 HStack(spacing: 6) {
                     Text(reminder.title)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .font(.callout)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 4)
@@ -111,7 +111,7 @@ struct NotchRemindersSection: View {
         }
         .padding(.horizontal, 6)
         .frame(height: rowHeight)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 
     @ViewBuilder private func trailing(_ reminder: NotchReminder) -> some View {
@@ -122,7 +122,7 @@ struct NotchRemindersSection: View {
         } else if reminder.hasTime, let due = reminder.due {
             Text(Self.time(due))
                 .font(.system(size: 11).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.secondary)
         }
     }
 

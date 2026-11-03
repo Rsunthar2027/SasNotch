@@ -159,7 +159,7 @@ struct NotchExpandedLevelView: View {
         HStack(spacing: 8) {
             Image(systemName: notice.symbol)
                 .frame(width: 18)
-            NotchMeter(value: notice.level ?? 0, height: 5, tint: .white)
+            NotchMeter(value: notice.level ?? 0, height: 5, tint: .primary)
                 .frame(maxWidth: 96)
             if showsDetail {
                 Text(notice.detail)

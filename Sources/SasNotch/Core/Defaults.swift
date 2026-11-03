@@ -12,6 +12,7 @@ enum DefaultsKey {
     static let appearance = "appAppearance"               // AppAppearance.rawValue
     static let liquidGlassEnabled = "liquidGlassEnabled"  // Liquid Glass in windows and panels on macOS 26+
     static let notchLiquidGlassEnabled = "notchLiquidGlassEnabled" // Dynamic Island glass, independently controlled
+    static let notchGlassStyle = "notchGlassStyle" // Regular or Clear Liquid Glass for the open island
     static let clamshellPreferred = "clamshellPreferred"  // apply closed-lid mode to every session
     static let dimScreenOnLidClose = "dimScreenOnLidClose" // dim the built-in display to zero while the lid is closed
     static let onboardingStep = "onboardingStep"          // resume point if onboarding is interrupted
@@ -1219,6 +1220,7 @@ enum Defaults {
         DefaultsKey.appearance: AppAppearance.fallback.rawValue,
         DefaultsKey.liquidGlassEnabled: true,
         DefaultsKey.notchLiquidGlassEnabled: true,
+        DefaultsKey.notchGlassStyle: NotchGlassStyle.fallback.rawValue,
         DefaultsKey.clamshellPreferred: false,
         DefaultsKey.dimScreenOnLidClose: false,
         DefaultsKey.defaultDuration: 0,

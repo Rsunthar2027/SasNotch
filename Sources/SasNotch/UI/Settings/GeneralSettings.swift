@@ -18,6 +18,7 @@ struct GeneralSettings: View {
     @State private var loginPending = false
     @State private var loginRefreshID = UUID()
     @AppStorage(DefaultsKey.hotkeyEnabled) private var hotkeyEnabled = true
+    @AppStorage(DefaultsKey.notchGlassStyle) private var notchGlassStyle = NotchGlassStyle.fallback.rawValue
 
     private var text: GeneralSettingsStrings { FeatureStrings.generalSettings(l10n.language) }
     private var appearanceStrings: AppearanceStrings { FeatureStrings.appearance(l10n.language) }
@@ -89,6 +90,16 @@ struct GeneralSettings: View {
         }
     }
 
+    /// Where the switches stand on a system without Liquid Glass. The island
+    /// keeps its frosted background there, a choice in its own settings.
+    private var liquidGlassUnavailable: some View {
+        Group {
+            Divider()
+            SettingsRow(symbol: "sparkles", title: appearanceStrings.liquidGlass,
+                        caption: NotchGlassText.requiresMacOS26) { EmptyView() }
+        }
+    }
+
     private var appearanceCard: some View {
         SettingsCard(title: appearanceStrings.label) {
             HStack(spacing: 10) {
@@ -115,10 +126,25 @@ struct GeneralSettings: View {
                     Toggle(FeatureStrings.notch(l10n.language).title,
                            isOn: $appearance.notchLiquidGlassEnabled)
                         .accessibilityLabel("\(appearanceStrings.liquidGlass), \(FeatureStrings.notch(l10n.language).title)")
+                    Picker(NotchGlassText.style, selection: Binding(
+                        get: { NotchGlassStyle.sanitized(notchGlassStyle) },
+                        set: { notchGlassStyle = $0.rawValue })) {
+                        ForEach(NotchGlassStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(!appearance.notchLiquidGlassEnabled)
+                    Text(NotchGlassText.styleCaption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .toggleStyle(TrailingSwitchToggleStyle())
                 .padding(.leading, settingsRowTextInset)
+            } else {
+                liquidGlassUnavailable
             }
+#else
+            liquidGlassUnavailable
 #endif
         }
     }

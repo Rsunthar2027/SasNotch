@@ -55,7 +55,7 @@ struct NotchMixerView: View {
                         NotchMicrophoneFader(height: faderHeight, editingVolumeID: $editingVolumeID)
                             .frame(width: Self.masterWidth)
                     }
-                    Rectangle().fill(.white.opacity(0.12)).frame(width: 1)
+                    Rectangle().fill(.primary.opacity(0.12)).frame(width: 1)
                         .accessibilityHidden(true)
                     desk.frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -140,12 +140,12 @@ struct NotchMixerView: View {
     private var permission: some View {
         HStack(spacing: 14) {
             Image(systemName: "waveform.badge.exclamationmark").font(.system(size: 24, weight: .light))
-                .foregroundStyle(.white.opacity(0.65))
+                .foregroundStyle(.secondary)
                 .frame(width: 56, height: 56)
-                .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 8) {
-                Text(l10n.s.mixerPermissionBody).font(.system(size: 12)).foregroundStyle(.secondary)
+                Text(l10n.s.mixerPermissionBody).font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(l10n.s.permissionOpenSettings) { Permissions.shared.openAudioCaptureSettings() }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -213,8 +213,8 @@ private struct NotchMasterFader: View {
                 if let muted = mixer.systemOutputMuted { adjustOutput(muted: !muted) }
             } label: {
                 Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(muted ? Color.red : Color.white)
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(muted ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
                     .contentTransition(.symbolEffect(.replace))
                     .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: muted)
                     .frame(width: 32, height: 32)
@@ -233,7 +233,7 @@ private struct NotchMasterFader: View {
                     adjustOutput(volume: $0)
                 }
             } else {
-                Text(l10n.s.mixerOutputUnavailable).font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(l10n.s.mixerOutputUnavailable).font(.caption).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -258,7 +258,7 @@ private struct NotchMicrophoneFader: View {
             // plain icon the options row shows.
             if AppFeature.micMute.isAvailable {
                 Button(action: micMute.toggle) {
-                    icon(muted: micMute.isMuted).foregroundStyle(micMute.isMuted ? Color.red : Color.white)
+                    icon(muted: micMute.isMuted).foregroundStyle(micMute.isMuted ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
                 }
                 .buttonStyle(NotchButtonStyle(cornerRadius: 14))
                 .accessibilityLabel(micMute.isMuted ? l10n.s.micUnmuteName : l10n.s.micMuteName)
@@ -285,7 +285,7 @@ private struct NotchMicrophoneFader: View {
 
     private func icon(muted: Bool) -> some View {
         Image(systemName: muted ? "mic.slash.fill" : "mic.fill")
-            .font(.system(size: 15, weight: .medium))
+            .font(.title3.weight(.medium))
             .contentTransition(.symbolEffect(.replace))
             .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: muted)
             .frame(width: 32, height: 32)
@@ -389,7 +389,7 @@ private struct NotchMixerOptions: View {
                     }
                     microphone
                 }
-                Divider().overlay(.white.opacity(0.12))
+                Divider().overlay(.primary.opacity(0.12))
                 MixerOptionsControls()
             }
             .padding(.trailing, 4)
@@ -424,8 +424,8 @@ private struct NotchMixerOptions: View {
                 if AppFeature.micMute.isAvailable {
                     Button(action: micMute.toggle) {
                         Image(systemName: micMute.isMuted ? "mic.slash.fill" : "mic.fill")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(micMute.isMuted ? Color.red : Color.white)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(micMute.isMuted ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
                             .frame(width: 18, height: 18)
                             .contentShape(Rectangle())
                     }
@@ -433,7 +433,7 @@ private struct NotchMixerOptions: View {
                     .accessibilityLabel(micMute.isMuted ? l10n.s.micUnmuteName : l10n.s.micMuteName)
                 } else {
                     Image(systemName: volume <= 0.001 ? "mic.slash.fill" : "mic.fill")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                         .frame(width: 18, height: 18)
                         .accessibilityHidden(true)
@@ -462,8 +462,8 @@ private struct NotchMixerOptions: View {
 
     private func row<Menu: View>(_ title: String, symbol: String, @ViewBuilder menu: () -> Menu) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: symbol).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).frame(width: 18)
-            Text(title).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            Image(systemName: symbol).font(.subheadline.weight(.medium)).foregroundStyle(.secondary).frame(width: 18)
+            Text(title).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
             Spacer(minLength: 4)
             menu()
         }
@@ -528,7 +528,7 @@ private struct NotchAppFader: View {
             } else {
                 NotchLevelSlider(value: Binding(get: { app.volume }, set: { mixer.setVolume($0, for: app) }),
                                  label: app.name, range: 0...AppVolumeMixer.maxVolume,
-                                 tint: boosting ? .orange : .white, vertical: true, trackThickness: 28, marker: 1,
+                                 tint: boosting ? Color.orange : nil, vertical: true, trackThickness: 28, marker: 1,
                                  valueLabel: "\(percent)%")
                     .frame(width: 40, height: NotchMixerFaderLayout.trackHeight(in: height))
                 NotchEditablePercent(percent: percent, maximum: Int(AppVolumeMixer.maxVolume * 100),
@@ -541,7 +541,7 @@ private struct NotchAppFader: View {
                 .overlay(alignment: .leading) {
                     Button { mixer.setVolume(1, for: app) } label: {
                         Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.callout.weight(.semibold))
                             .foregroundStyle(boosting ? Color.orange : Color.secondary)
                             .frame(width: 28, height: 28)
                             .contentShape(Rectangle())
@@ -555,7 +555,7 @@ private struct NotchAppFader: View {
                 .overlay(alignment: .trailing) {
                     Button { mixer.toggleMute(app) } label: {
                         Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.callout.weight(.medium))
                             .foregroundStyle(muted ? Color.red : Color.secondary)
                             .frame(width: 28, height: 28)
                             .contentShape(Rectangle())
@@ -608,8 +608,8 @@ private struct NotchAppFader: View {
     private var actionsMenu: some View {
         Menu { actions } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.7))
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.secondary)
                 .frame(width: 24, height: 28)
                 .contentShape(Rectangle())
         }

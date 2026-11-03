@@ -305,6 +305,11 @@ final class NotchWindowHost: NSObject, CAAnimationDelegate {
         if canvas.backdropPresentation.stripHeight != geometry.stripHeight {
             canvas.backdropPresentation.stripHeight = geometry.stripHeight
         }
+        let seamHeight = NotchGlassSeam.height(stripHeight: geometry.stripHeight, isNotched: geometry.isNotched,
+                                               floats: geometry.floats)
+        if canvas.backdropPresentation.seamHeight != seamHeight {
+            canvas.backdropPresentation.seamHeight = seamHeight
+        }
         if canAnimate && changesFrame && (usesGlass || canvas.usesGlass) {
             // Glass closing into a black strip shuts as its page leaves, so the
             // empty shell never shows the windows beneath it; opening out of one

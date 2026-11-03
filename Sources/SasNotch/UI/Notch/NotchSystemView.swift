@@ -5,6 +5,8 @@
 import SwiftUI
 
 struct NotchSystemView: View {
+    @Environment(\.notchGlassSurface) private var glassSurface
+    @Environment(\.notchTileRadius) private var tileRadius
     let size: CGSize
     let select: (MetricDetailKind) -> Void
     @ObservedObject private var monitor = SystemMonitor.shared
@@ -118,10 +120,13 @@ struct NotchSystemView: View {
     private func grid(cards: [Card], rows: [Range<Int>]) -> some View {
         VStack(spacing: NotchLayout.rowSpacing) {
             ForEach(rows, id: \.lowerBound) { row in
-                HStack(spacing: NotchLayout.rowSpacing) {
-                    ForEach(Array(cards[row])) { card in
-                        cardButton(card)
-                            .frame(maxWidth: .infinity)
+                // Each row's lenses share one container and blend as they change.
+                NotchGlassGroup(spacing: NotchLayout.rowSpacing) {
+                    HStack(spacing: NotchLayout.rowSpacing) {
+                        ForEach(Array(cards[row])) { card in
+                            cardButton(card)
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                 }
             }
@@ -132,16 +137,16 @@ struct NotchSystemView: View {
         Button { select(card.kind) } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Label(card.title, systemImage: card.symbol)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary).lineLimit(1)
                 Text(card.value ?? "…")
                     .font(.system(size: card.detail == nil ? 22 : 15, weight: .medium, design: .rounded))
                     .monospacedDigit().contentTransition(.numericText()).lineLimit(1).minimumScaleFactor(0.75)
                     .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: card.value)
                 if let detail = card.detail {
-                    Text(detail).font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
+                    Text(detail).font(.subheadline).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
                 } else if let level = card.level {
-                    NotchMeter(value: level, tint: card.wantsAttention ? .orange : .white)
+                    NotchMeter(value: level, tint: card.wantsAttention ? .orange : .primary)
                 }
             }
             .padding(.horizontal, 12)
@@ -149,7 +154,7 @@ struct NotchSystemView: View {
             .frame(height: NotchLayout.systemCardHeight)
             .modifier(NotchControlSurface(cornerRadius: 18))
         }
-        .buttonStyle(NotchButtonStyle(cornerRadius: 18))
+        .buttonStyle(NotchButtonStyle(cornerRadius: glassSurface ? min(18, tileRadius) : 18, lifts: !glassSurface))
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { select(card.kind) }

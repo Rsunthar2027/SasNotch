@@ -7,6 +7,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct NotchFilesView: View {
+    @Environment(\.notchGlassSurface) private var glassSurface
+    @Environment(\.notchTileRadius) private var tileRadius
+    /// On glass a drop target's corners are concentric with the island's.
+    private var destinationRadius: CGFloat { glassSurface ? min(20, tileRadius) : 20 }
     @ObservedObject var service: NotchService
     @ObservedObject private var shelf = ShelfService.shared
     @ObservedObject private var l10n = L10n.shared
@@ -60,8 +64,8 @@ struct NotchFilesView: View {
             } else if shelf.items.isEmpty {
                 NotchEmptyView(symbol: "tray.and.arrow.down", message: FeatureStrings.notch(l10n.language).dropHint)
                     .frame(maxHeight: .infinity)
-                    .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(.white.opacity(0.18), style: StrokeStyle(lineWidth: 0.75, dash: [4, 5])) }
+                    .overlay { RoundedRectangle(cornerRadius: destinationRadius, style: .continuous)
+                        .strokeBorder(.primary.opacity(0.18), style: StrokeStyle(lineWidth: 0.75, dash: [4, 5])) }
             } else {
                 ShelfTilesView(items: shelf.visibleItems,
                                contentRevision: shelf.contentRevision,
@@ -131,10 +135,12 @@ struct NotchFilesView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.white.opacity(selected ? 0.14 : 0.04), in: RoundedRectangle(cornerRadius: 20))
+        .notchGlass(RoundedRectangle(cornerRadius: destinationRadius, style: .continuous),
+                    offGlass: selected ? 0.14 : 0.04, tint: selected ? NotchGlassTint.selection : nil,
+                    interactive: false, selected: selected, id: "notch.files.\(symbol)")
         .overlay {
-            RoundedRectangle(cornerRadius: 20)
-                .strokeBorder(.white.opacity(selected ? 0.7 : 0.2), lineWidth: selected ? 1.5 : 0.75)
+            RoundedRectangle(cornerRadius: destinationRadius, style: .continuous)
+                .strokeBorder(.primary.opacity(selected ? 0.7 : 0.2), lineWidth: selected ? 1.5 : 0.75)
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -149,8 +155,8 @@ struct NotchFilesView: View {
             Button(l10n.s.uninstallerCancel, role: .cancel) {}
         } label: {
             Image(systemName: "trash")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.55))
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
@@ -187,11 +193,11 @@ struct NotchFilesView: View {
     @ViewBuilder private var shelfHint: some View {
         if shelf.selection.isEmpty {
             Text(l10n.s.shelfHint)
-                .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 .help(l10n.s.shelfHint)
         } else {
             Text(String(format: l10n.s.shelfSelectedFormat, shelf.selection.count))
-                .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                .font(.callout).foregroundStyle(.secondary).lineLimit(1)
         }
     }
 
@@ -233,7 +239,7 @@ struct NotchFilesView: View {
                 Text("\(text.archive) · \(count)")
                 Text(count)
             }
-            .font(.system(size: 12)).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
+            .font(.callout).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
             NotchIconButton(symbol: "xmark", title: l10n.s.uninstallerCancel, action: archives.cancel)
                 .disabled(archives.wasCancelled)
         }

@@ -12,6 +12,9 @@ struct NotchView: View {
     @ObservedObject private var launcher = QuickLauncherService.shared
     @ObservedObject private var updates = UpdateService.shared
     @AppStorage(DefaultsKey.notchLiquidGlassEnabled) private var glass = true
+    @ObservedObject private var appearance = NotchSystemAppearance.shared
+    /// The island's glass identities, shared by its top row and its pages.
+    @Namespace private var glassNamespace
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -34,7 +37,9 @@ struct NotchView: View {
                 transaction.animation = .easeInOut(duration: NotchMascotMotion.restCrossfade)
             }
             .frame(width: service.surfaceSize.width, height: service.surfaceSize.height, alignment: .top)
-            .foregroundStyle(.white)
+            // White is right on black and frosted. On Liquid Glass the content
+            // takes the system's own label styles, which the glass lights.
+            .foregroundStyle(ink)
             // The window server leaves SwiftUI content that ignores hit tests
             // out of its own hit test unless it is fully opaque. The backdrop
             // ignores them (allowsHitTesting(false) in NotchSurfaceBackground),
@@ -57,12 +62,21 @@ struct NotchView: View {
                 DispatchQueue.main.async { service.refreshPresentation(animated: false) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .environment(\.colorScheme, .dark)
+            .environment(\.colorScheme, surfaceScheme)
             .environment(\.notchPresentation, true)
             .environment(\.notchGlassSurface, usesGlassSurface)
-            .tint(.white)
+            .environment(\.notchGlassNamespace, glassNamespace)
+            .environment(\.notchTileRadius, NotchGlassGeometry.tileRadius(
+                surfaceRadius: NotchLayout.surfaceRadius(height: service.expandedSize.height)))
+            .tint(usesGlassSurface ? Color.primary : .white)
             .accessibilityIdentifier("notch.surface")
     }
+
+    /// Black and frosted islands are dark whatever the system is; open on
+    /// Liquid Glass the island takes the app's appearance, as the glass does.
+    private var surfaceScheme: ColorScheme { usesGlassSurface ? appearance.scheme : .dark }
+
+    private var ink: AnyShapeStyle { usesGlassSurface ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.white) }
 
     private var usesGlassSurface: Bool {
 #if compiler(>=6.2)
@@ -118,11 +132,11 @@ struct NotchView: View {
                     Label(text.dropHint, systemImage: "tray.and.arrow.down")
                 }
             }
-                .font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
+                .font(.body.weight(.medium)).foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, minHeight: 52)
                 .overlay {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(.white.opacity(0.24),
+                        .strokeBorder(.primary.opacity(0.24),
                                       style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
                         .allowsHitTesting(false)
                 }
@@ -299,7 +313,7 @@ struct NotchView: View {
                     NotchExpandedLevelView(notice: feedback)
                         .padding(.horizontal, 10)
                         .frame(width: 170, height: 28)
-                        .background(.black, in: Capsule())
+                        .notchGlass(Capsule(), offGlassColor: .black, interactive: false)
                         .frame(maxWidth: .infinity, alignment: wraps ? .trailing : .leading)
                 }
             }
@@ -363,37 +377,47 @@ struct NotchView: View {
         let makesRoom = homeReading != nil && feedback != nil
         // A level reading covers its side for the moment it shows; the
         // controls there stay mounted, so a search keeps its focus.
-        return NotchBandRow(band: band, covered: feedback == nil ? nil : side) {
-            if !wraps {
-                bandLeading(band)
-                items.leading
-            }
-        } trailing: {
-            if makesRoom {
-                Color.clear.frame(width: readingWidth)
-            } else {
-                // The island's own marks follow the page's controls while they
-                // fit their side, never pushing them under the camera; the menu
-                // offers the same actions either way.
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) { items.trailing; trailingSections(band); updateControl(band); pinMark }
-                    HStack(spacing: 6) {
-                        items.trailing; trailingSections(band)
-                        NotchUpdateControl(action: service.showUpdate, compact: true); pinMark
+        // On glass the row's buttons share one container, so they flow into
+        // each other as the page, the sections or a detail change them.
+        return NotchGlassGroup(spacing: 6) {
+            NotchBandRow(band: band, covered: feedback == nil ? nil : side) {
+                if !wraps {
+                    bandLeading(band)
+                    items.leading
+                }
+            } trailing: {
+                if makesRoom {
+                    Color.clear.frame(width: readingWidth)
+                } else {
+                    // The island's own marks follow the page's controls while they
+                    // fit their side, never pushing them under the camera; the menu
+                    // offers the same actions either way.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) { items.trailing; trailingSections(band); updateControl(band); pinMark }
+                        HStack(spacing: 6) {
+                            items.trailing; trailingSections(band)
+                            NotchUpdateControl(action: service.showUpdate, compact: true); pinMark
+                        }
+                        HStack(spacing: 6) { items.trailing; trailingSections(band); pinMark }
+                        HStack(spacing: 6) { items.trailing; trailingSections(band) }
                     }
-                    HStack(spacing: 6) { items.trailing; trailingSections(band); pinMark }
-                    HStack(spacing: 6) { items.trailing; trailingSections(band) }
                 }
             }
         }
         // The levels ease aside for the reading and back.
         .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: makesRoom)
+        .animation(NotchGlassMotion.morph(reduceMotion: reduceMotion), value: bandMorphKey)
         .overlay(alignment: side == .leading ? .leading : .trailing) {
             if let feedback {
                 NotchExpandedLevelView(notice: feedback, showsDetail: readingWidth >= NotchLayout.levelReadingDetailWidth)
                     .frame(width: readingWidth)
             }
         }
+        // Beside the camera the row sits on the black the housing keeps, so
+        // it stays light on dark there, on glass too.
+        .environment(\.colorScheme, band.besideCamera ? .dark : surfaceScheme)
+        .foregroundStyle(band.besideCamera ? AnyShapeStyle(Color.white) : ink)
+        .environment(\.notchGlassNamesBySymbol, true)
         // Drawn here rather than in the page, the row's controls read the
         // island's language for their dates and numbers, as the page does.
         .environment(\.locale, l10n.language.formattingLocale())
@@ -401,8 +425,21 @@ struct NotchView: View {
 
     /// A page that lays out its leading side itself ends its row with the
     /// way to the sections, after its own controls, where they fit together.
-    @ViewBuilder private func trailingSections(_ band: NotchBand) -> some View {
-        if band.trailingSectionsButton { NotchSectionsButton(action: service.toggleSections) }
+    private func trailingSections(_ band: NotchBand) -> some View {
+        Group {
+            if band.trailingSectionsButton { NotchSectionsButton(action: service.toggleSections) }
+        }
+        .environment(\.notchGlassUnion, Self.marksUnion)
+    }
+
+    /// The island's own marks at the row's end: on glass the sections button
+    /// and the pin read as one capsule.
+    private static let marksUnion = "notch.band.marks"
+
+    /// What the row shows changes with the page, the sections and a detail;
+    /// its glass morphs from one to the next.
+    private var bandMorphKey: String {
+        "\(service.selected.rawValue)|\(service.showingSections)|\(showsDetail)|\(service.pinned)"
     }
 
     private func updateControl(_ band: NotchBand) -> some View {
@@ -412,7 +449,10 @@ struct NotchView: View {
     /// A kept-open island says so, and one click lets it go.
     @ViewBuilder private var pinMark: some View {
         if service.pinned {
-            NotchIconButton(symbol: "pin.fill", title: text.unpin, selected: true) { service.pinned = false }
+            NotchIconButton(symbol: "pin.fill", title: text.unpin, selected: true, glassID: "notch.band.pin") {
+                service.pinned = false
+            }
+            .environment(\.notchGlassUnion, Self.marksUnion)
         }
     }
 
@@ -423,7 +463,9 @@ struct NotchView: View {
 
     @ViewBuilder private func bandLeading(_ band: NotchBand) -> some View {
         if service.showingSections {
-            NotchIconButton(symbol: "chevron.left", title: l10n.s.obBack, action: service.toggleSections)
+            // The way back takes the sections button's place, and its glass.
+            NotchIconButton(symbol: "chevron.left", title: l10n.s.obBack, glassID: NotchSectionsButton.glassID,
+                            action: service.toggleSections)
             // Beside the camera the field takes the rest of its side.
             NotchSectionSearch(service: service, maximumFieldWidth: band.besideCamera ? .infinity : 150)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -543,7 +585,8 @@ struct NotchView: View {
             HStack(spacing: 9) {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
                 Text(navigationTitle)
                     .font(.system(size: 16, weight: .semibold))
                     .lineLimit(1)
@@ -628,7 +671,7 @@ struct NotchPinnedIndicator: View {
             Image(systemName: "pin.fill")
                 .font(.system(size: 8, weight: .semibold))
                 .rotationEffect(.degrees(45))
-                .foregroundStyle(.white.opacity(hovering ? 0.85 : (sticky ? 0.6 : 0.38)))
+                .foregroundStyle(.primary.opacity(hovering ? 0.85 : (sticky ? 0.6 : 0.38)))
                 .frame(width: 28, height: 14)
                 .contentShape(Rectangle())
         }

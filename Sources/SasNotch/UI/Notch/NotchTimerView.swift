@@ -97,12 +97,12 @@ struct NotchTimerView: View {
         NotchMenuButton(title: TimerPresetText.presets, items: presetItems) {
             HStack(spacing: NotchTimerSupport.ModePicker.menuSpacing) {
                 Text(TimerPresetText.presets)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.subheadline.weight(.medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
             }
-            .foregroundStyle(.white.opacity(0.7))
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
             .frame(height: 22)
             .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -200,7 +200,7 @@ struct NotchTimerView: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
             }
-            .foregroundStyle(.white.opacity(0.85))
+            .foregroundStyle(.primary)
             .padding(.horizontal, NotchTimerSupport.ModePicker.labelPadding)
             .frame(height: 28)
             .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -229,7 +229,7 @@ struct NotchTimerView: View {
                     Text(title(for: candidate))
                         .font(.system(size: NotchTimerSupport.ModePicker.labelSize, weight: .medium))
                         .lineLimit(1)
-                        .foregroundStyle(selected ? .white : .white.opacity(0.5))
+                        .foregroundStyle(selected ? .primary : .secondary)
                         .padding(.horizontal, NotchTimerSupport.ModePicker.labelPadding)
                         .frame(height: NotchTimerSupport.ModePicker.height)
                         .overlay(alignment: .bottom) {
@@ -293,8 +293,8 @@ struct NotchTimerView: View {
         let progress = service.session.mode == .pomodoro
             ? String(format: text.sessionProgress, service.session.sessionNumber, service.session.configuration.totalSessions)
             : service.session.completed ? service.session.label : nil
-        let phase = Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.orange)
-        let place = progress.map { Text($0).font(.system(size: 12)).monospacedDigit().foregroundStyle(.secondary) }
+        let phase = Text(title).font(.body.weight(.semibold)).foregroundStyle(.orange)
+        let place = progress.map { Text($0).font(.callout).monospacedDigit().foregroundStyle(.secondary) }
         return ViewThatFits(in: .horizontal) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 phase
@@ -352,7 +352,7 @@ struct NotchTimerView: View {
                     .lineLimit(1).truncationMode(.tail)
                 HStack(spacing: 3) {
                     Text(display(option, current))
-                        .font(.system(size: 12, weight: .semibold)).monospacedDigit().foregroundStyle(.orange)
+                        .font(.callout.weight(.semibold)).monospacedDigit().foregroundStyle(.orange)
                     Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).foregroundStyle(.secondary)
                 }
             }

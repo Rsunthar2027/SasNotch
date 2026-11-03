@@ -24,7 +24,7 @@ struct NotchCameraView: View {
                     Image(systemName: "web.camera").font(.system(size: 30, weight: .light))
                         .foregroundStyle(.secondary).accessibilityHidden(true)
                         .frame(width: 56, height: 56)
-                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     VStack(alignment: .leading, spacing: 8) {
                         Text(text.cameraHint).font(.callout).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -100,7 +100,7 @@ struct NotchMirrorSelfieFeedback: View {
             Color.white.opacity(flash)
             if let feedback = selfie.feedback {
                 Label(feedback.outcome.message, systemImage: feedback.outcome.symbol)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)

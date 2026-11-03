@@ -62,10 +62,10 @@ private struct NotchDownloadsSetupView: View {
 
     private var glyph: some View {
         Image(systemName: downloads.folderUnavailable ? "exclamationmark.triangle" : "arrow.down.circle")
-            .font(.system(size: 26, weight: .light))
-            .foregroundStyle(.white.opacity(0.65))
+            .font(.largeTitle.weight(.light))
+            .foregroundStyle(.secondary)
             .frame(width: 56, height: 56)
-            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .accessibilityHidden(true)
     }
 
@@ -74,8 +74,8 @@ private struct NotchDownloadsSetupView: View {
         // folder to choose.
         Text(downloads.folderUnavailable ? text.folderUnavailable
              : offersSwitchOnly ? text.downloadsTitle : enabled ? text.downloadsHint : text.downloadsDescription)
-            .font(.system(size: 12))
-            .foregroundStyle(downloads.folderUnavailable ? Color.orange : .white.opacity(0.65))
+            .font(.callout)
+            .foregroundStyle(downloads.folderUnavailable ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -99,18 +99,18 @@ private struct NotchDownloadsSetupView: View {
         HStack(spacing: 8) {
             Button(action: downloads.chooseFolder) {
                 Text(text.chooseFolder)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                     .padding(.horizontal, 14)
                     .frame(height: 28)
-                    .background(.white.opacity(0.14), in: Capsule())
+                    .notchGlass(Capsule(), offGlass: 0.14, tint: NotchGlassTint.selection, selected: true)
                     .contentShape(Capsule())
             }
             .buttonStyle(NotchButtonStyle(cornerRadius: 14))
             if downloads.folderUnavailable {
                 Button(action: downloads.forgetFolder) {
                     Text(text.clearFolder)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.secondary)
                         .padding(.horizontal, 10)
                         .frame(height: 28)
                         .contentShape(Capsule())
@@ -175,9 +175,9 @@ struct NotchDownloadsView: View {
             HStack(spacing: 8) {
                 let fileLabel = HStack(spacing: 8) {
                     Image(systemName: item.completed ? "checkmark.circle.fill" : "arrow.down.circle")
-                        .foregroundStyle(item.completed ? .green : .white)
+                        .foregroundStyle(item.completed ? AnyShapeStyle(Color.green) : AnyShapeStyle(.primary))
                         .accessibilityHidden(true)
-                    Text(item.name).font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                    Text(item.name).font(.callout.weight(.medium)).lineLimit(1).truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if item.completed {
@@ -226,9 +226,21 @@ struct NotchDownloadsView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .modifier(NotchDownloadCardSurface())
         .clipped()
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// A download's card: a still lens on glass, its corners concentric with the
+/// island's, and the quiet fill elsewhere.
+private struct NotchDownloadCardSurface: ViewModifier {
+    @Environment(\.notchGlassSurface) private var glassSurface
+    @Environment(\.notchTileRadius) private var tileRadius
+
+    func body(content: Content) -> some View {
+        content.notchGlass(RoundedRectangle(cornerRadius: glassSurface ? min(14, tileRadius) : 14, style: .continuous),
+                           offGlass: 0.07, interactive: false)
     }
 }
 
@@ -258,7 +270,7 @@ struct NotchDownloadStrip: View {
                         Image(systemName: "arrow.down.circle.fill").font(.system(size: iconSize))
                         if NotchDownloadSupport.showsCompactName(in: geometry) {
                             Text(item?.name ?? FeatureStrings.notchFiles(l10n.language).downloadsTitle)
-                                .font(.system(size: 11, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                                .font(.subheadline.weight(.medium)).lineLimit(1).truncationMode(.middle)
                         }
                     }
                 }

@@ -52,7 +52,7 @@ struct NotchLyricsView: View {
                     if !playback.hasPosition { Text(text.noPosition).font(.caption).foregroundStyle(.secondary) }
                     ScrollView {
                         Text(lyrics.plain.isEmpty ? lyrics.lines.map(\.text).joined(separator: "\n") : lyrics.plain)
-                            .font(.system(size: 15, weight: .medium)).textSelection(.enabled)
+                            .font(.title3.weight(.medium)).textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .notchScrollEdgeFade()
@@ -127,8 +127,8 @@ struct NotchLyricsView: View {
                         // rewrap as the song moves. The sung one lights up.
                         ForEach(Array(lyrics.lines.enumerated()), id: \.element.id) { index, line in
                             Text(line.text.isEmpty ? "♪" : line.text)
-                                .font(.system(size: 17, weight: .bold))
-                                .foregroundStyle(.white.opacity(index == active ? 1 : 0.35))
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(.primary.opacity(index == active ? 1 : 0.35))
                                 .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: index == active)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)

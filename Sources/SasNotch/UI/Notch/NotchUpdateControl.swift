@@ -25,7 +25,7 @@ struct NotchUpdateControl: View {
                         Label(l10n.s.updateBannerAction, systemImage: "arrow.down.circle.fill")
                     }
                 }
-                .font(.system(size: 11, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
             }
             .buttonStyle(.borderedProminent)
@@ -57,7 +57,7 @@ struct NotchUpdateControl: View {
                 }
             }
         }
-        .font(.system(size: 10, weight: .medium))
+        .font(.caption.weight(.medium))
         .frame(maxWidth: compact ? nil : 110)
         .help(title)
         .accessibilityElement(children: .ignore)
