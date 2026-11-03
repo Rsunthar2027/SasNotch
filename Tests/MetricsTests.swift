@@ -84,6 +84,7 @@ struct MetricsTests {
             }),
             ("repository", { RepositoryFeatureTests.run(suite) }),
             ("live-activities", { LiveActivityTests.run(suite) }),
+            ("charge-limit", { ChargeLimitTests.run(suite) }),
             ("screenshots", {
                 ScreenshotClipboardTests.run(suite)
                 ScreenshotAutoCopyTests.run(suite)

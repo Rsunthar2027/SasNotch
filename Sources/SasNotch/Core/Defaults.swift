@@ -923,6 +923,9 @@ enum DefaultsKey {
     static let notchLowBatteryEarly = "notchLowBatteryEarly"
     static let notchLowBatteryEarlyThreshold = "notchLowBatteryEarlyThreshold"
     static let notchLowBatteryMenuBar = "notchLowBatteryMenuBar"
+    // Battery charge cap
+    static let notchChargeLimitEnabled = "notchChargeLimitEnabled"
+    static let notchChargeLimitPercent = "notchChargeLimitPercent" // ChargeLimitSupport.range, in steps of 5
     static let notchHoverDelay = "notchHoverDelay"
     static let notchCloseDelay = "notchCloseDelay"
     static let notchReturnHome = "notchReturnHome"
@@ -1533,6 +1536,9 @@ enum Defaults {
         DefaultsKey.notchLowBatteryEarly: false,
         DefaultsKey.notchLowBatteryEarlyThreshold: NotchSupport.defaultEarlyBatteryThreshold,
         DefaultsKey.notchLowBatteryMenuBar: true,
+        // Battery charge cap
+        DefaultsKey.notchChargeLimitEnabled: false,
+        DefaultsKey.notchChargeLimitPercent: ChargeLimitSupport.defaultLimit,
         DefaultsKey.notchHoverDelay: NotchSupport.defaultHoverDelay,
         DefaultsKey.notchCloseDelay: NotchSupport.defaultCloseDelay,
         DefaultsKey.notchReturnHome: false,

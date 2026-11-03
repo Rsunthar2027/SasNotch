@@ -198,6 +198,9 @@ final class NotchService: ObservableObject {
     private var awaitsTrackNotice = false
     private var powerSource: CFRunLoopSource?
     private var powerSampler: PowerSampler?
+    /// Kept through the island's teardowns, such as the lock screen, so
+    /// coming back to a Mac still plugged in past the limit says nothing new.
+    private var chargeLimit = ChargeLimitMonitor()
     private var captureID: UUID?
     private var captureFallback: (() -> Void)?
     private var captureClose: (() -> Void)?
@@ -1151,6 +1154,7 @@ final class NotchService: ObservableObject {
             + String(NotchSupport.routesShelf()) + String(NotchSupport.revealsShelfDrag())
             + String(NotchSupport.routesCaptureControls())
             + String(NotchMascotSupport.isEnabled())
+            + String(ChargeLimitSupport.isEnabled())
         if signature != settingsSignature {
             settingsSignature = signature
             bindEvents()
@@ -1179,6 +1183,14 @@ final class NotchService: ObservableObject {
         // the island's size publishes nothing else: hiding a control left the
         // open island, and the preview in Settings, as they were.
         objectWillChange.send()
+        // Switched on or moved, the limit is checked against the charge now
+        // rather than at the next reading; switched off, it forgets the
+        // charging session it spoke for.
+        if !ChargeLimitSupport.isEnabled() {
+            chargeLimit = ChargeLimitMonitor()
+        } else if powerSampler != nil, let notice = chargeLimitNotice(for: power) {
+            show(notice)
+        }
         if AppFeature.mixer.isAvailable { PreciseVolumeRollerService.shared.syncWithPreferences() }
         if AppFeature.brightness.isAvailable { BrightnessService.shared.syncWithPreferences() }
     }
@@ -4220,8 +4232,10 @@ final class NotchService: ObservableObject {
                                       detail: text.title, symbol: "doc.on.clipboard"))
             }.store(in: &subscriptions)
         }
-        // The companion loves being plugged in, so it listens for the charger too.
-        if NotchSupport.routes(.battery) || idleContent == .battery || NotchMascotSupport.isEnabled() { startPower() }
+        // The companion loves being plugged in, so it listens for the charger
+        // too, and so does the charge limit.
+        if NotchSupport.routes(.battery) || idleContent == .battery || NotchMascotSupport.isEnabled()
+            || ChargeLimitSupport.isEnabled() { startPower() }
     }
 
     private func showAgentEvent(_ event: AgentUsageEvent) {
@@ -4395,19 +4409,40 @@ final class NotchService: ObservableObject {
         power = next
         let pluggedIn = !before.externalConnected && next.externalConnected
         let low = (next.chargePercent ?? 100) <= 20 && (before.chargePercent ?? 0) > 20
+        let charged = next.externalConnected && before.isCharging && !next.isCharging && next.chargePercent == 100
+        let reaction = NotchMascotSupport.powerReaction(pluggedIn: pluggedIn, charged: charged, low: low)
+        // Reaching the limit outranks saying the Mac is charging: it is the
+        // one battery notice that asks for something.
+        if let limitNotice = chargeLimitNotice(for: next, mascot: reaction) {
+            show(limitNotice)
+            if let reaction { reactMascot(reaction) }
+            return
+        }
         guard before.externalConnected != next.externalConnected || low
                 || (before.isCharging && !next.isCharging && next.chargePercent == 100) else { return }
         let text = FeatureStrings.notch(L10n.shared.language)
         let title = low ? text.lowBattery : next.externalConnected
             ? (next.isCharging ? text.charging : next.chargePercent == 100
                 ? text.charged : L10n.shared.s.powerPluggedIn) : text.onBattery
-        let charged = next.externalConnected && before.isCharging && !next.isCharging && next.chargePercent == 100
-        let reaction = NotchMascotSupport.powerReaction(pluggedIn: pluggedIn, charged: charged, low: low)
         show(NotchNotice(event: .battery, title: title,
                          detail: next.chargePercent.map { "\($0)%" } ?? "",
                          symbol: next.externalConnected ? "battery.100percent.bolt" : "battery.25percent",
                          mascot: reaction))
         if let reaction { reactMascot(reaction) }
+    }
+
+    /// Hands the charge limit a reading. The first one this charging session
+    /// at or past the limit posts the notification, which goes out even when
+    /// battery notices are off in the island, and returns the island's notice.
+    private func chargeLimitNotice(for reading: PowerReading, mascot: NotchMascotReaction? = nil) -> NotchNotice? {
+        let limit = ChargeLimitSupport.limit()
+        guard chargeLimit.update(percent: reading.chargePercent, onAC: reading.externalConnected,
+                                 limit: limit, enabled: ChargeLimitSupport.isEnabled()) else { return nil }
+        let percent = reading.chargePercent ?? limit
+        Notifier.post(title: ChargeLimitText.notificationTitle,
+                      body: ChargeLimitText.notificationBody(percent: percent))
+        return NotchNotice(event: .battery, title: ChargeLimitText.noticeTitle, detail: "\(percent)%",
+                           symbol: "powerplug", mascot: mascot)
     }
 
     private func syncVisibleConsumers() {

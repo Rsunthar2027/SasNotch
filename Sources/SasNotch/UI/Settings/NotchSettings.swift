@@ -89,6 +89,8 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchLowBatteryEarly) private var earlyBatteryWarning = false
     @AppStorage(DefaultsKey.notchLowBatteryEarlyThreshold) private var earlyBatteryThreshold = NotchSupport.defaultEarlyBatteryThreshold
     @AppStorage(DefaultsKey.notchLowBatteryMenuBar) private var lowBatteryMenuBar = true
+    @AppStorage(DefaultsKey.notchChargeLimitEnabled) private var chargeLimitEnabled = false
+    @AppStorage(DefaultsKey.notchChargeLimitPercent) private var chargeLimitPercent = ChargeLimitSupport.defaultLimit
     @AppStorage(DefaultsKey.notchHiddenControls) private var hiddenControls = NotchControlItem.defaultHidden
     @AppStorage(DefaultsKey.notchControlOrder) private var controlOrder = ""
     @AppStorage(DefaultsKey.notchShowInCaptures) private var showInCaptures = true
@@ -149,6 +151,7 @@ struct NotchSettings: View {
          String(customWidth), String(customHeight), String(cameraFitWidth), String(cameraFitHeight),
          String(compactExtraWidth), String(compactExtraHeight), String(compactCornerRadius), String(expandedCornerRadius),
          String(lockScreen), String(lockWeather), lockWeatherCity, String(lockBattery),
+         String(chargeLimitEnabled), String(chargeLimitPercent),
          String(focusEnabled), focusShortcut, String(privacyEnabled),
          String(capsuleFitWidth), String(capsuleFitHeight), String(capsuleFitDrop), String(hapticFeedback),
          String(shelfWindow), String(dragReveal), String(captureControls), String(quickPanel), String(appPanel),
@@ -685,6 +688,8 @@ struct NotchSettings: View {
                 if accessoriesEnabled { Text(FeatureStrings.notchActivities(l10n.language).accessoryDescription).font(.caption).foregroundStyle(.secondary) }
                 if enabled, (volume || brightness || keyboardLight), !permissions.accessibility { PermissionRow(kind: .accessibility) }
             }
+            // A Mac without a battery has no charge to cap.
+            if PowerSampler.hasInternalBattery { chargeLimitCard }
             let locked = FeatureStrings.notchLockScreen(l10n.language)
             SettingsCard(title: locked.title) {
                 switchRow("lock.display", locked.show, caption: locked.showHint, isOn: $lockScreen)
@@ -847,7 +852,34 @@ struct NotchSettings: View {
         }
     }
 
-    private func levelSlider(_ title: String, range: ClosedRange<Int>, value: Binding<Int>) -> some View {
+    /// A reminder to unplug at a chosen charge. SasNotch only reads the
+    /// charge, so the card says plainly that it cannot hold the Mac there.
+    private var chargeLimitCard: some View {
+        SettingsCard(title: ChargeLimitText.title) {
+            switchRow("powerplug", ChargeLimitText.toggle, caption: ChargeLimitText.caption, isOn: $chargeLimitEnabled)
+            if chargeLimitEnabled {
+                levelSlider(ChargeLimitText.limit, range: ChargeLimitSupport.range, step: ChargeLimitSupport.step,
+                            value: Binding(get: { ChargeLimitSupport.sanitizedLimit(chargeLimitPercent) },
+                                           set: { chargeLimitPercent = ChargeLimitSupport.sanitizedLimit($0) }))
+                if permissions.notifications == .denied {
+                    Text(ChargeLimitText.notificationsOff).font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Text(ChargeLimitText.limitation).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            // Offered only where this Mac's own Battery pane says it opens
+            // from that address.
+            if ChargeLimitSupport.batteryPaneAvailable, let url = ChargeLimitSupport.batteryPaneURL {
+                Button(ChargeLimitText.openBatterySettings) { NSWorkspace.shared.open(url) }
+            }
+        }
+        .onChange(of: chargeLimitEnabled) { _, enabled in
+            if enabled { Notifier.requestPermission() }
+        }
+    }
+
+    private func levelSlider(_ title: String, range: ClosedRange<Int>, step: Int = 1, value: Binding<Int>) -> some View {
         let formatted = "\(value.wrappedValue)%"
         let slider = Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = Int($0.rounded()) })
         return VStack(alignment: .leading, spacing: 6) {
@@ -856,7 +888,7 @@ struct NotchSettings: View {
                 Spacer()
                 Text(formatted).monospacedDigit().foregroundStyle(.secondary)
             }
-            Slider(value: slider, in: Double(range.lowerBound)...Double(range.upperBound), step: 1) {
+            Slider(value: slider, in: Double(range.lowerBound)...Double(range.upperBound), step: Double(step)) {
                 Text(title)
             }.labelsHidden().accessibilityValue(formatted)
         }.padding(.leading, settingsRowTextInset)

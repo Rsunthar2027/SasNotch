@@ -611,6 +611,7 @@ if (( TEST )); then
         Sources/SasNotch/Core/PointerDisplayStrings.swift
         Sources/SasNotch/Core/GraphScaleStrings.swift
         Sources/SasNotch/Core/NotchLowBatteryStrings.swift
+        Sources/SasNotch/Services/Notch/ChargeLimitSupport.swift
         Sources/SasNotch/Services/CleaningMode/CleaningUnlockCounter.swift
         Sources/SasNotch/Services/CleaningMode/CleaningMouseReleaseGate.swift
         Sources/SasNotch/Services/Display/ExtraBrightnessSupport.swift
