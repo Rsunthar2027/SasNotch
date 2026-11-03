@@ -33,14 +33,21 @@ enum FeatureHubLayoutTests {
         @ViewBuilder var neverUsedCard: some View {
             if features.offersNeverUsed { Text("Never used").frame(height: 120) }
         }
-        var dynamicIslandCard: some View {
-            Text("Dynamic Island").frame(height: 900).id(FeatureGroup.dynamicIsland)
-        }
+        // Advanced open, so the page is as long as it gets.
+        let advancedExpanded = true
+        // The header above the core rows stands in for the notices' room, so
+        // the first marked row is never at the very top of the page.
+        var coreCard: some View { section(FeatureHubSection.core, AppFeature.coreIslandFeatures, header: 700) }
+        var moreCard: some View { section(FeatureHubSection.more, AppFeature.moreCoreFeatures, header: 60) }
+        var advancedHeader: some View { Text("Advanced features").frame(height: 60).id(FeatureHubSection.advanced) }
         var presetsCard: some View { Text("Presets").frame(height: 180) }
         func groupCard(_ group: FeatureGroup) -> some View {
+            section(group, AppFeature.features(in: group).filter { $0.hubSection == .advanced }, header: 30)
+        }
+        func section<ID: Hashable>(_ id: ID, _ members: [AppFeature], header: CGFloat) -> some View {
             SettingsCard {
-                Text(group.rawValue)
-                ForEach(AppFeature.features(in: group), id: \.self) { feature in
+                Text(String(describing: id)).frame(height: header)
+                ForEach(members, id: \.self) { feature in
                     if [.clipboardHistory, .mixer, .screenRecorder, .fanControl].contains(feature) {
                         FeatureRow(feature: feature).frame(height: 44)
                     } else {
@@ -48,7 +55,7 @@ enum FeatureHubLayoutTests {
                     }
                 }
             }
-            .id(group)
+            .id(id)
         }
     }
 

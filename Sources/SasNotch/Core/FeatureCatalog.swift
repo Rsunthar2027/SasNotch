@@ -38,9 +38,20 @@ enum AppFeature: String, CaseIterable {
     case monitorCPU, monitorGPU, monitorMemory, monitorNetwork, monitorDisk, monitorPower, connectedDevices, fanControl
 }
 
-/// Hub sections, in display order.
+/// Hub groups, in display order. Inside Advanced on the Features page.
 enum FeatureGroup: String, CaseIterable {
     case windowsDock, mouseKeyboard, clipboardFiles, sound, energyDisplay, tools, dynamicIsland, monitor
+
+    /// The groups Advanced shows: those with at least one advanced feature.
+    static var withAdvancedFeatures: [FeatureGroup] {
+        allCases.filter { group in AppFeature.advancedFeatures.contains { $0.group == group } }
+    }
+}
+
+/// The Features page's three sections, top to bottom: the island's locked
+/// core tiles, twelve more tools, and everything else under Advanced.
+enum FeatureHubSection: Hashable {
+    case core, more, advanced
 }
 
 /// System permissions surfaced by the hub's transparency portal.
@@ -298,7 +309,7 @@ extension AppFeature {
     /// audio priority, whose output and input controls work together. The
     /// live equalizer stays off: it asks for system audio recording on the
     /// first song, so only the user's own switch turns it on.
-    private var initialEnableKeys: [String] {
+    var initialEnableKeys: [String] {
         switch self {
         case .windowLayout: return [DefaultsKey.windowLayoutShortcutsEnabled]
         case .audioPriority: return enabledKeys
@@ -401,6 +412,40 @@ extension AppFeature {
 
     static func features(in group: FeatureGroup) -> [AppFeature] {
         allCases.filter { $0.group == group }
+    }
+
+    /// The features behind the island's 12 core tiles, in the order the
+    /// Features page lists them: Controls and Now Playing are the island
+    /// itself, Volume mixer, Clipboard, Files, System (the six metric
+    /// monitors), Calendar, Notifications, Timer, Mirror, Downloads and AI
+    /// Agents. They are locked: no surface uninstalls them and every preset
+    /// keeps them. A Mac set up before the lock may lack one, and the page
+    /// then offers it like any other install.
+    static let coreIslandFeatures: [AppFeature] = [
+        .notch, .mixer, .clipboardHistory, .shelf,
+        .monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork, .monitorDisk, .monitorPower,
+        .notchCalendar, .notchNotifications, .notchTimer, .cameraPreview, .notchDownloads, .notchAgents,
+    ]
+
+    var isLocked: Bool { Self.coreIslandFeatures.contains(self) }
+
+    /// Twelve more tools on the main Features page, in this order. The first
+    /// four come installed and switched on; the others are one switch away.
+    static let moreCoreFeatures: [AppFeature] = [
+        .switcher, .windowLayout, .keepAwake, .brightness, .screenshot, .screenOCR,
+        .colorPicker, .textSnippets, .finderCutPaste, .dockPreview, .uninstaller, .micMute,
+    ]
+
+    static var recommendedTools: [AppFeature] { Array(moreCoreFeatures.prefix(4)) }
+
+    /// Everything else, under a collapsed Advanced section.
+    static var advancedFeatures: [AppFeature] {
+        allCases.filter { $0.hubSection == .advanced }
+    }
+
+    var hubSection: FeatureHubSection {
+        if isLocked { return .core }
+        return Self.moreCoreFeatures.contains(self) ? .more : .advanced
     }
 
     /// The Dynamic Island's extensions: everything else in its group. They

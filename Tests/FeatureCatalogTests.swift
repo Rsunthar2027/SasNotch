@@ -2026,10 +2026,70 @@ enum FeatureCatalogTests {
         }
         for preset in FeaturePreset.allCases {
             suite.expect(preset.enableKeys.allSatisfy { key in
-                       preset.features.contains { $0.enabledKeys.contains(key) }
+                       preset.features.contains { $0.enabledKeys.contains(key) || $0.initialEnableKeys.contains(key) }
                    },
                    "preset enable keys belong to its own features (\(preset.rawValue))")
         }
+
+        // MARK: The simpler default setup
+
+        let core = AppFeature.coreIslandFeatures
+        let more = AppFeature.moreCoreFeatures
+        suite.expect(core == [.notch, .mixer, .clipboardHistory, .shelf,
+                              .monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork, .monitorDisk, .monitorPower,
+                              .notchCalendar, .notchNotifications, .notchTimer, .cameraPreview, .notchDownloads,
+                              .notchAgents]
+                && AppFeature.allCases.allSatisfy { $0.isLocked == core.contains($0) },
+               "the features behind the island's 12 core tiles are exactly the locked ones")
+        suite.expect(more == [.switcher, .windowLayout, .keepAwake, .brightness, .screenshot, .screenOCR,
+                              .colorPicker, .textSnippets, .finderCutPaste, .dockPreview, .uninstaller, .micMute]
+                && AppFeature.recommendedTools == [.switcher, .windowLayout, .keepAwake, .brightness],
+               "the twelve More tools keep their order, and the first four are the recommended ones")
+        suite.expect(Set(core).isDisjoint(with: more)
+                && core.count + more.count + AppFeature.advancedFeatures.count == AppFeature.allCases.count
+                && AppFeature.allCases.allSatisfy {
+                    ($0.hubSection == .core) == core.contains($0) && ($0.hubSection == .more) == more.contains($0)
+                },
+               "every feature sits in exactly one of the Features page's three sections")
+        suite.expect(FeatureGroup.withAdvancedFeatures.allSatisfy { group in
+                    AppFeature.advancedFeatures.contains { $0.group == group }
+                } && Set(AppFeature.advancedFeatures.map(\.group)) == Set(FeatureGroup.withAdvancedFeatures),
+               "Advanced lists every group that has an advanced feature, and no empty one")
+        let coreSuiteName = "com.sasnotch.tests.core-tiles.\(UUID().uuidString)"
+        if let coreDefaults = UserDefaults(suiteName: coreSuiteName) {
+            // Every feature written out: registered defaults are shared by the
+            // whole process, and another check may have registered installs.
+            for feature in AppFeature.allCases {
+                coreDefaults.set(core.contains(feature), forKey: feature.availabilityKey)
+            }
+            let coreTiles: [NotchModule] = [.controls, .mixer, .music, .clipboard, .files, .system, .calendar,
+                                            .notifications, .timer, .camera, .downloads, .agents]
+            suite.expect(NotchModule.allCases.filter { $0.isAvailable(in: coreDefaults) } == coreTiles,
+                   "the locked features alone make the island's 12 core tiles available")
+            coreDefaults.removePersistentDomain(forName: coreSuiteName)
+        } else {
+            suite.expect(false, "core tiles suite can be created")
+        }
+        suite.expect(FeaturePreset.essential.features == Set(core + AppFeature.recommendedTools),
+               "a new install gets the core tiles and the four recommended tools, and nothing else")
+        suite.expect(Set(FeaturePreset.essential.enableKeys) == [
+                    DefaultsKey.notchEnabled, DefaultsKey.clipboardHistoryEnabled, DefaultsKey.shelfEnabled,
+                    DefaultsKey.notchCalendarEnabled, DefaultsKey.notchNotificationsEnabled,
+                    DefaultsKey.notchTimerEnabled, DefaultsKey.notchDownloadsEnabled, DefaultsKey.notchAgentsEnabled,
+                    DefaultsKey.switcherEnabled, DefaultsKey.windowLayoutShortcutsEnabled,
+                    DefaultsKey.brightnessControlEnabled,
+                ],
+               "the recommended setup switches on every core tile and the four tools' main controls")
+        suite.expect(FeaturePreset.isRecommendedSetup(isAvailable: FeaturePreset.essential.features.contains)
+                && !FeaturePreset.isRecommendedSetup(isAvailable: { $0 != .notchAgents
+                    && FeaturePreset.essential.features.contains($0) })
+                && !FeaturePreset.isRecommendedSetup(isAvailable: { _ in true }),
+               "only exactly the recommended installs count as the recommended setup")
+        let lockRuntimeSource = (try? String(contentsOfFile: "Sources/SasNotch/App/FeatureRuntime.swift",
+                                             encoding: .utf8)) ?? ""
+        suite.expect(lockRuntimeSource.contains("return available ? feature.isHardwareSupported : !feature.isLocked")
+                && lockRuntimeSource.contains("func applyRecommendedSetup() {\n        apply(.essential)\n    }"),
+               "the one install gate refuses to uninstall a locked tile, and reset reuses the preset path")
         suite.expect(AppFeature.monitorCPU.energyProfile == .periodic
                 && AppFeature.clipboardHistory.energyProfile == .periodic
                 && AppFeature.mouseAcceleration.energyProfile == .idle

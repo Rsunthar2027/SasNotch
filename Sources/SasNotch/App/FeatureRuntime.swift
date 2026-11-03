@@ -74,6 +74,12 @@ final class FeatureRuntime: ObservableObject {
 
     var availableCount: Int { AppFeature.allCases.filter(\.isAvailable).count }
 
+    /// Whether anything installed could be uninstalled: the island's locked
+    /// core tiles never count.
+    var hasUninstallableFeatures: Bool {
+        AppFeature.allCases.contains { $0.isAvailable && !$0.isLocked }
+    }
+
     /// How many features this Mac can end up with. Counting against the whole
     /// catalog instead would leave the hub's install-all button forever one
     /// short of its own disabled condition on a Mac missing some hardware.
@@ -88,13 +94,14 @@ final class FeatureRuntime: ObservableObject {
     /// all decide here. A feature the Mac cannot run never installs, so a
     /// disabled row cannot be walked around from the button above it.
     ///
-    /// Uninstalls are never refused and an existing install is never revoked:
-    /// the check reads hardware and can be wrong, and a wrong answer that
-    /// strands someone's settings costs far more than one that leaves a
-    /// feature reporting itself unsupported.
+    /// The island's locked core tiles are never uninstalled, so a preset, the
+    /// uninstall-all button and a row all keep them. Any other uninstall is
+    /// allowed, and an existing install is never revoked: the hardware check
+    /// can be wrong, and a wrong answer that strands someone's settings costs
+    /// far more than one that leaves a feature reporting itself unsupported.
     private func mayFlip(_ feature: AppFeature, to available: Bool) -> Bool {
         guard feature.isAvailable != available else { return false }
-        return !available || feature.isHardwareSupported
+        return available ? feature.isHardwareSupported : !feature.isLocked
     }
 
     /// Flipping availability runs each feature's binding immediately, in the
@@ -134,10 +141,18 @@ final class FeatureRuntime: ObservableObject {
 
     /// Applies a hub preset: its features become the installed set, with
     /// their enable keys switched on so they work right away, and everything
-    /// else uninstalls. Nothing is deleted, so any feature returns with one
-    /// click, settings intact.
+    /// else uninstalls except the locked core tiles. Nothing is deleted, so
+    /// any feature returns with one click, settings intact.
     func apply(_ preset: FeaturePreset) {
         replaceAvailable(with: preset.features, enabling: preset.enableKeys)
+    }
+
+    /// The recommended setup a new install starts from: the island's core
+    /// tiles and the first four tools installed and switched on, everything
+    /// else uninstalled with its settings kept. The Features page's reset
+    /// button and the offer after an update both land here.
+    func applyRecommendedSetup() {
+        apply(.essential)
     }
 
     /// Replaces the installed set after the first-run picker. It uses the same

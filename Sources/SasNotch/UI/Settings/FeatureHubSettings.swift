@@ -5,12 +5,14 @@
 import AppKit
 import SwiftUI
 
-/// The Features hub. Install or uninstall each feature, grouped in plain
-/// language: uninstalling removes it from the whole app (Settings, panel,
-/// menu bar, shortcuts) and stops its work; its configuration is kept for
-/// its return. The Permissions tab is the transparency portal: what each system
-/// permission does, which features use it right now, and a gentle nudge when
-/// one is granted with nothing using it.
+/// The Features hub. The island's locked core tiles come first, then twelve
+/// more tools with a switch each, then everything else in a collapsed
+/// Advanced section, grouped in plain language. Uninstalling removes a
+/// feature from the whole app (Settings, panel, menu bar, shortcuts) and
+/// stops its work; its configuration is kept for its return. The
+/// Permissions tab is the transparency portal: what each system permission
+/// does, which features use it right now, and a gentle nudge when one is
+/// granted with nothing using it.
 struct FeatureHubSettings: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var features = FeatureRuntime.shared
@@ -27,7 +29,7 @@ struct FeatureHubSettings: View {
     /// gives an ordinary page anchor.
     @State private var highlightedFeature: AppFeature?
     @State private var expandedGroups = Set(FeatureGroup.allCases)
-    @State private var islandExtensionsExpanded = true
+    @AppStorage(DefaultsKey.featureHubAdvancedExpanded) private var advancedExpanded = false
     @State private var presetsExpanded = true
     /// Installed switches never once turned on, read when the page appears
     /// and after every install change rather than on every redraw.
@@ -89,10 +91,14 @@ struct FeatureHubSettings: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background { FeatureHubScrollAnchor() }
                 if tab == .features {
-                    dynamicIslandCard
-                    presetsCard
-                    ForEach(FeatureGroup.allCases.filter { $0 != .dynamicIsland }, id: \.self) { group in
-                        groupCard(group)
+                    coreCard
+                    moreCard
+                    advancedHeader
+                    if advancedExpanded {
+                        presetsCard
+                        ForEach(FeatureGroup.withAdvancedFeatures, id: \.self) { group in
+                            groupCard(group)
+                        }
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         Text(hub.footerNote)
@@ -142,14 +148,18 @@ struct FeatureHubSettings: View {
         router.consumeFeatureTarget(id: request.id)
         revealID = request.id
         if tab == .permissions { tab = .features }
-        if request.feature.group == .dynamicIsland {
-            if request.feature != .notch { islandExtensionsExpanded = true }
-        } else {
+        let section = request.feature.hubSection
+        if section == .advanced {
+            advancedExpanded = true
             expandedGroups.insert(request.feature.group)
         }
         DispatchQueue.main.async {
             guard self.revealID == request.id else { return }
-            proxy.scrollTo(request.feature.group, anchor: .top)
+            if section == .advanced {
+                proxy.scrollTo(request.feature.group, anchor: .top)
+            } else {
+                proxy.scrollTo(section, anchor: .top)
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
                 guard self.revealID == request.id else { return }
                 reveal(request.feature, using: proxy)
@@ -221,9 +231,10 @@ struct FeatureHubSettings: View {
                 Button(hub.uninstallAllButton) {
                     FeatureRuntime.shared.setAllAvailable(false)
                 }
-                .disabled(features.availableCount == 0)
+                .disabled(!features.hasUninstallableFeatures)
             }
             InstalledShareBar(installed: features.availableCount, total: features.installableCount)
+            RecommendedSetupResetRow()
         }
     }
 
@@ -343,41 +354,96 @@ struct FeatureHubSettings: View {
         }
     }
 
-    /// The island stays near the top, with its additions in a group the user
-    /// can close when they want a shorter catalog.
-    private var dynamicIslandCard: some View {
-        let members = AppFeature.features(in: .dynamicIsland)
-        let installed = members.filter(\.isAvailable).count
-        return SettingsCard {
-            groupHeader(.dynamicIsland, installed: installed, total: members.count)
-            FeatureHubRow(feature: .notch, hub: hub,
-                          isHighlighted: highlightedFeature == .notch)
-                .id(AppFeature.notch)
-            DisclosureGroup(
-                FeatureStrings.notch(l10n.language).modules,
-                isExpanded: $islandExtensionsExpanded
-            ) {
-                if islandExtensionsExpanded {
-                    VStack(spacing: 0) {
-                        ForEach(members.filter { $0 != .notch }, id: \.self) { feature in
-                            FeatureHubRow(feature: feature, hub: hub,
-                                          isHighlighted: highlightedFeature == feature)
-                                .id(feature)
-                            if feature != members.last {
-                                Divider().padding(.leading, 8)
-                            }
-                        }
+    /// The island's 12 core tiles, through the features behind them. They
+    /// are locked, so each row shows a lock where others have Uninstall.
+    private var coreCard: some View {
+        sectionCard(.core, members: AppFeature.coreIslandFeatures, title: SimpleSetupText.coreTitle,
+                    caption: SimpleSetupText.coreCaption, symbol: AppFeature.notch.symbolName)
+    }
+
+    /// Twelve more tools, each a switch away.
+    private var moreCard: some View {
+        sectionCard(.more, members: AppFeature.moreCoreFeatures, title: SimpleSetupText.moreTitle,
+                    caption: SimpleSetupText.moreCaption, symbol: "wrench.and.screwdriver.fill", usesSwitch: true)
+    }
+
+    private func sectionCard(_ section: FeatureHubSection, members: [AppFeature], title: String,
+                             caption: String, symbol: String, usesSwitch: Bool = false) -> some View {
+        SettingsCard {
+            sectionHeader(title: title, caption: caption, symbol: symbol,
+                          installed: members.filter(\.isAvailable).count, total: members.count)
+            VStack(spacing: 0) {
+                ForEach(members, id: \.self) { feature in
+                    FeatureHubRow(feature: feature, hub: hub,
+                                  isHighlighted: highlightedFeature == feature, usesSwitch: usesSwitch)
+                        .id(feature)
+                    if feature != members.last {
+                        Divider().padding(.leading, 8)
                     }
                 }
             }
         }
-        .id(FeatureGroup.dynamicIsland)
+        .id(section)
     }
 
-    /// Groups start open and are measured before scrolling begins.
-    /// Closing a group removes its feature rows until the user reopens it.
+    /// Opens and closes Advanced: the presets and every other feature, in
+    /// their groups. It starts closed and remembers how it was left.
+    private var advancedHeader: some View {
+        let members = AppFeature.advancedFeatures
+        return SettingsCard {
+            Button {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { advancedExpanded.toggle() }
+            } label: {
+                HStack(spacing: 10) {
+                    sectionHeader(title: SimpleSetupText.advancedTitle, caption: SimpleSetupText.advancedCaption,
+                                  symbol: "square.grid.3x3.fill",
+                                  installed: members.filter(\.isAvailable).count, total: members.count)
+                    Image(systemName: "chevron.forward")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(advancedExpanded ? 90 : 0))
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(SimpleSetupText.advancedTitle)
+            .accessibilityValue(advancedExpanded ? SimpleSetupText.expanded : SimpleSetupText.collapsed)
+        }
+        .id(FeatureHubSection.advanced)
+    }
+
+    private func sectionHeader(title: String, caption: String, symbol: String,
+                               installed: Int, total: Int) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 26, height: 26)
+                .background(Color.accentColor.opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline)
+                Text(caption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 12)
+            Text("\(installed)/\(total)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            InstalledShareBar(installed: installed, total: total)
+                .controlSize(.small)
+                .frame(width: 64)
+        }
+    }
+
+    /// Advanced's groups start open and are measured before scrolling
+    /// begins. Closing a group removes its feature rows until the user
+    /// reopens it. Each lists only its advanced features.
     private func groupCard(_ group: FeatureGroup) -> some View {
-        let members = AppFeature.features(in: group)
+        let members = AppFeature.features(in: group).filter { $0.hubSection == .advanced }
         let installed = members.filter(\.isAvailable).count
         return SettingsCard {
             DisclosureGroup(isExpanded: Binding(
@@ -647,11 +713,43 @@ private struct PresetCard: View {
     }
 }
 
+// MARK: - Reset to the recommended setup
+
+/// Puts back the setup a new install starts from, after a confirmation. It
+/// changes availability only, like every other install on this page, so no
+/// feature loses its settings.
+private struct RecommendedSetupResetRow: View {
+    @State private var confirming = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(SimpleSetupText.resetCaption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 12)
+            Button(SimpleSetupText.resetButton) { confirming = true }
+        }
+        .alert(SimpleSetupText.resetConfirmTitle, isPresented: $confirming) {
+            Button(SimpleSetupText.resetConfirm) {
+                withAnimation(.easeOut(duration: 0.22)) {
+                    FeatureRuntime.shared.applyRecommendedSetup()
+                }
+            }
+            Button(SimpleSetupText.cancel, role: .cancel) {}
+        } message: {
+            Text(SimpleSetupText.resetConfirmMessage)
+        }
+    }
+}
+
 // MARK: - Feature row
 
 /// Icon, name and one line about the feature; small icons for the
-/// permissions it can use and what it keeps alive; and the install action.
-/// An installed feature with a page of its own opens it from the row.
+/// permissions it can use and what it keeps alive; and the install action:
+/// a lock for an installed core tile, a switch for the More tools, and
+/// Install or Uninstall otherwise. An installed feature with a page of its
+/// own opens it from the row.
 private struct FeatureHubRow: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var features = FeatureRuntime.shared
@@ -661,6 +759,7 @@ private struct FeatureHubRow: View {
     let feature: AppFeature
     let hub: FeatureHubStrings
     var isHighlighted: Bool = false
+    var usesSwitch: Bool = false
 
     private var installed: Bool { feature.isAvailable }
 
@@ -829,7 +928,27 @@ private struct FeatureHubRow: View {
 
     @ViewBuilder
     private var installAction: some View {
-        if installed {
+        if installed && feature.isLocked {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 38)
+                .help(SimpleSetupText.lockedHelp)
+                .accessibilityLabel("\(accessibilityTitle). \(SimpleSetupText.locked)")
+        } else if usesSwitch {
+            // .help() never fires on a disabled control, so the reason sits
+            // on the wrapper, as on the Install button below.
+            HStack(spacing: 0) {
+                Toggle(isOn: Binding(get: { installed }, set: { flip(to: $0) })) {
+                    Text(accessibilityTitle)
+                }
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
+                .disabled(unsupportedReason != nil)
+            }
+            .help(unsupportedReason ?? "")
+        } else if installed {
             Button(hub.uninstallButton) {
                 if installedExtensions.isEmpty { flip(to: false) } else { confirmingExtensions = true }
             }

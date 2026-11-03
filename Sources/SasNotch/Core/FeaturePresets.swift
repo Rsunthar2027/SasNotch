@@ -6,17 +6,19 @@ import Foundation
 
 /// One-click starting points for the Features hub. A preset is a shape, not a
 /// prison: applying one installs and engages its features and uninstalls the
-/// rest, but nothing is deleted — every feature keeps its settings and comes
-/// back with one click, exactly like any hub install.
+/// rest, except the island's locked core tiles, which every preset keeps.
+/// Nothing is deleted — every feature keeps its settings and comes back with
+/// one click, exactly like any hub install.
 enum FeaturePreset: String, CaseIterable, Identifiable {
     case essential, windows, battery
 
     var id: String { rawValue }
 
-    /// A clean install starts from the small Essential set before any feature
-    /// binding runs. Updates keep every existing availability choice, and an
-    /// interrupted setup keeps the selection already applied on its purpose
-    /// step.
+    /// A clean install starts from the recommended Essential set before any
+    /// feature binding runs, written out for every feature so the registered
+    /// defaults (which describe an updating Mac's install) never apply to it.
+    /// Updates keep every existing availability choice, and an interrupted
+    /// setup keeps the selection already applied on its purpose step.
     static func prepareFirstRunAvailability(in defaults: UserDefaults = .standard) {
         guard !defaults.bool(forKey: DefaultsKey.hasOnboarded),
               defaults.integer(forKey: DefaultsKey.onboardingStep) == 0
@@ -27,20 +29,20 @@ enum FeaturePreset: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Whether the installed features are exactly the recommended setup, so
+    /// offering it would change nothing.
+    static func isRecommendedSetup(isAvailable: (AppFeature) -> Bool) -> Bool {
+        AppFeature.allCases.allSatisfy { isAvailable($0) == essential.features.contains($0) }
+    }
+
     /// The features the preset keeps installed.
     var features: Set<AppFeature> {
         switch self {
         case .essential:
-            // SasNotch's defaults: the island with its everyday extensions and
-            // the utilities it is known for. Features that change how the
-            // mouse, keyboard or windows behave stay out until chosen.
-            return Set([.notch] + AppFeature.dynamicIslandInitialExtensions)
-                .union([.mixer, .micMute, .keepAwake, .brightness,
-                        .monitorCPU, .monitorGPU, .monitorMemory,
-                        .monitorNetwork, .monitorDisk, .monitorPower,
-                        .switcher, .windowLayout, .dockPreview,
-                        .clipboardHistory, .textSnippets, .finderCutPaste, .shelf,
-                        .uninstaller, .colorPicker, .cameraPreview])
+            // SasNotch's recommended setup: the island's core tiles and the
+            // first four of the tools beside them. The other tools and every
+            // advanced feature wait on the Features page.
+            return Set(AppFeature.coreIslandFeatures + AppFeature.recommendedTools)
         case .windows:
             return [.switcher, .windowLayout, .dockPreview, .dockClick, .windowMaximizer]
         case .battery:
@@ -56,9 +58,11 @@ enum FeaturePreset: String, CaseIterable, Identifiable {
     var enableKeys: [String] {
         switch self {
         case .essential:
-            return [DefaultsKey.notchEnabled, DefaultsKey.switcherEnabled, DefaultsKey.dockPreviewEnabled,
-                    DefaultsKey.clipboardHistoryEnabled, DefaultsKey.textSnippetsEnabled,
-                    DefaultsKey.finderCutPasteEnabled, DefaultsKey.shelfEnabled,
+            // Every core tile shows, and the four tools work, from the start.
+            return [DefaultsKey.notchEnabled, DefaultsKey.clipboardHistoryEnabled, DefaultsKey.shelfEnabled,
+                    DefaultsKey.notchCalendarEnabled, DefaultsKey.notchNotificationsEnabled,
+                    DefaultsKey.notchTimerEnabled, DefaultsKey.notchDownloadsEnabled, DefaultsKey.notchAgentsEnabled,
+                    DefaultsKey.switcherEnabled, DefaultsKey.windowLayoutShortcutsEnabled,
                     DefaultsKey.brightnessControlEnabled]
         case .battery:
             return []
