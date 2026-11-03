@@ -307,6 +307,7 @@ if (( TEST )); then
         Sources/SasNotch/UI/Settings/NotchSettingsTabRow.swift
         Sources/SasNotch/Core/NotchActivityStrings.swift
         Sources/SasNotch/Services/Notch/NotchTimerSupport.swift
+        Sources/SasNotch/Services/Notch/NotchTimerPresetSupport.swift
         Sources/SasNotch/Services/Notch/NotchAppFullscreen.swift
         Sources/SasNotch/Services/Notch/NotchTimerAlert.swift
         Sources/SasNotch/UI/Notch/NotchIslandAlert.swift

@@ -372,7 +372,7 @@ struct NotchLockScreenActivities: View {
                 Text(session.mode == .pomodoro && !finished ? text.phase(session.phase) + " " + clock : clock)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(text.phase(session.phase))
+            .accessibilityLabel(NotchTimerSupport.title(for: session, text: text))
             .accessibilityValue(clock)
         case .calendar:
             if let countdown = calendar.countdown {

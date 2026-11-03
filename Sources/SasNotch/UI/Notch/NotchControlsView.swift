@@ -507,7 +507,7 @@ private struct NotchTimerTile: View {
         let active = session.hasSession
         return NotchActionTile(
             symbol: active ? symbol(session) : NotchControlItem.timer.symbol,
-            title: active ? FeatureStrings.notchActivities(l10n.language).phase(session.phase)
+            title: active ? NotchTimerSupport.title(for: session, text: FeatureStrings.notchActivities(l10n.language))
                 : NotchControlItem.timer.title(l10n),
             reading: active ? NotchTimerSupport.clockText(for: session, at: timer.now) : nil,
             readingCountsDown: !session.countsUp,

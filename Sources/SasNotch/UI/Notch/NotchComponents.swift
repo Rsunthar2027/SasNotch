@@ -731,6 +731,8 @@ struct NotchMenuItem {
     var symbol: String? = nil
     var enabled = true
     var action: () -> Void = {}
+    /// Entries that open beside this one, which then has no action of its own.
+    var submenu: [NotchMenuItem] = []
 
     /// A line between groups of entries.
     static let separator = NotchMenuItem(title: "")
@@ -850,23 +852,8 @@ final class NotchMenuAnchor: NSObject {
 
     func popUp(_ items: [NotchMenuItem]) {
         guard let view else { return }
-        actions = items.map(\.action)
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        // The island is dark whatever the system is, so its menus are too.
-        menu.appearance = NSAppearance(named: .darkAqua)
-        for (index, item) in items.enumerated() {
-            guard !item.isSeparator else { menu.addItem(.separator()); continue }
-            let entry = NSMenuItem(title: item.title, action: #selector(choose(_:)), keyEquivalent: "")
-            entry.target = self
-            entry.tag = index
-            entry.state = item.checked ? .on : .off
-            entry.isEnabled = item.enabled
-            if let symbol = item.symbol {
-                entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-            }
-            menu.addItem(entry)
-        }
+        actions = []
+        let menu = self.menu(items)
         // A menu whose top lands on the menu bar's edge opens scrolled past its
         // first entry, so a button against the bar opens it a little below.
         var location = NSPoint.zero
@@ -876,6 +863,34 @@ final class NotchMenuAnchor: NSObject {
             if bottom > edge { location.y -= bottom - edge }
         }
         menu.popUp(positioning: nil, at: location, in: view)
+    }
+
+    /// Each entry with an action is tagged with its place in `actions`,
+    /// those in a submenu too.
+    private func menu(_ items: [NotchMenuItem]) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        // The island is dark whatever the system is, so its menus are too.
+        menu.appearance = NSAppearance(named: .darkAqua)
+        for item in items {
+            guard !item.isSeparator else { menu.addItem(.separator()); continue }
+            let entry = NSMenuItem(title: item.title, action: nil, keyEquivalent: "")
+            if item.submenu.isEmpty {
+                entry.action = #selector(choose(_:))
+                entry.target = self
+                entry.tag = actions.count
+                actions.append(item.action)
+            } else {
+                entry.submenu = self.menu(item.submenu)
+            }
+            entry.state = item.checked ? .on : .off
+            entry.isEnabled = item.enabled
+            if let symbol = item.symbol {
+                entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            }
+            menu.addItem(entry)
+        }
+        return menu
     }
 
     @objc private func choose(_ sender: NSMenuItem) {

@@ -125,6 +125,7 @@ struct MetricsTests {
                 NotchSettingsTabRowTests.run(suite)
                 NotchPresentationProbeArgumentTests.run(suite)
             }),
+            ("timer-presets", { NotchTimerPresetTests.run(suite) }),
             ("switcher-model", { SwitcherModelFeatureTests.run(suite) }),
             ("agents", { NotchAgentTests.run(suite) }),
             ("features", {

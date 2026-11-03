@@ -353,7 +353,7 @@ struct NotchCapsuleTimerStrip: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(FeatureStrings.notchActivities(l10n.language).phase(timer.session.phase))
+        .accessibilityLabel(NotchTimerSupport.title(for: timer.session, text: FeatureStrings.notchActivities(l10n.language)))
         .accessibilityValue(NotchTimerSupport.clockText(for: timer.session, at: timer.now))
         .accessibilityHint(FeatureStrings.notch(l10n.language).open)
     }

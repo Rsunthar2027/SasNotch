@@ -61,7 +61,7 @@ struct NotchTimerStrip: View {
                 .contentShape(Rectangle())
             }
             .accessibilityLabel(companion.map { NotchCompanionMark.label($0, language: l10n.language) }
-                                ?? FeatureStrings.notchActivities(l10n.language).phase(timer.session.phase))
+                                ?? NotchTimerSupport.title(for: timer.session, text: FeatureStrings.notchActivities(l10n.language)))
             Color.clear.frame(width: geometry.compactActivityCameraGap)
             if timer.session.isRunning {
                 TimelineView(.periodic(from: Date(timeIntervalSinceNow: NotchTimerSupport.tickScheduleOffset(
@@ -102,7 +102,7 @@ struct NotchTimerStrip: View {
                    alignment: .trailing)
             .contentShape(Rectangle())
         }
-        .accessibilityLabel(FeatureStrings.notchActivities(l10n.language).phase(timer.session.phase))
+        .accessibilityLabel(NotchTimerSupport.title(for: timer.session, text: FeatureStrings.notchActivities(l10n.language)))
         .accessibilityValue(NotchTimerSupport.clockText(for: timer.session, at: now))
     }
 }

@@ -860,6 +860,9 @@ enum DefaultsKey {
     static let notchPomodoroLongBreakMinutes = "notchPomodoroLongBreakMinutes"
     static let notchPomodoroLongBreakInterval = "notchPomodoroLongBreakInterval"
     static let notchPomodoroTotalSessions = "notchPomodoroTotalSessions"
+    // Timer presets: the user's own named countdowns, as JSON. The built-in
+    // ones live in code and are never stored.
+    static let notchTimerPresets = "notchTimerPresets"
     static let notchCameraEnabled = "notchCameraEnabled"
     static let notchAccessoriesEnabled = "notchAccessoriesEnabled"
     static let notchLyricsEnabled = "notchLyricsEnabled"
@@ -1475,6 +1478,8 @@ enum Defaults {
         DefaultsKey.notchPomodoroLongBreakMinutes: 15,
         DefaultsKey.notchPomodoroLongBreakInterval: 4,
         DefaultsKey.notchPomodoroTotalSessions: 4,
+        // Timer presets
+        DefaultsKey.notchTimerPresets: Data(),
         DefaultsKey.notchCameraEnabled: true,
         DefaultsKey.notchAccessoriesEnabled: true,
         DefaultsKey.notchCalendarEnabled: true,
