@@ -64,6 +64,9 @@ enum UpdateIntroFlowTests {
         func markUpdateShowcaseIntroSeen() {}
         func showUpdateShowcaseIntroIfNeeded() -> Bool { false }
         func showBrightnessUpdatePromptIfNeeded() { shown.append("finished") }
+        /// Counted apart from the windows: it decides for itself whether to ask.
+        var simpleSetupOffers = 0
+        func showSimpleSetupOfferIfNeeded() { simpleSetupOffers += 1 }
         func showUpdateHighlights(isReview: Bool = false) {
             updateHighlightsIsReview = isReview
             updateHighlightsWindow = NSWindow()
@@ -116,6 +119,7 @@ enum UpdateIntroFlowTests {
             let host = reset(version)
             host.presentUpdateIntros()
             suite.expect(host.shown.isEmpty, "\(version) opens no tour, showcase or support window on launch")
+            suite.expect(host.simpleSetupOffers == 1, "\(version) with no What's New goes on to the setup offer")
         }
         let quittingReview = reset("1.0.0")
         quittingReview.showWhatsNew(from: "0.9.0", includeUnreleased: true, isReview: true)
@@ -172,8 +176,10 @@ enum UpdateIntroFlowTests {
         let stable = reset("1.0.1")
         launch(stable, previous: "1.0.0")
         suite.expect(stable.shown == ["whatsNew 1.0.0"], "an update opens What's New")
+        suite.expect(stable.simpleSetupOffers == 0, "the setup offer waits while What's New is open")
         close(stable.whatsNewWindow, stable)
-        suite.expect(stable.shown == ["whatsNew 1.0.0"], "nothing else follows What's New")
+        suite.expect(stable.shown == ["whatsNew 1.0.0"], "no other window follows What's New")
+        suite.expect(stable.simpleSetupOffers == 1, "closing What's New goes on to the setup offer, once")
         suite.expect(UserDefaults.standard.string(forKey: pendingKey) == nil
                         && UserDefaults.standard.string(forKey: DefaultsKey.whatsNewSeenVersion) == "1.0.1",
                      "closing What's New consumes the update")
@@ -244,6 +250,8 @@ enum UpdateIntroFlowTests {
 
         let fresh = reset("1.0.2")
         fresh.markOnboardingComplete()
+        suite.expect(UserDefaults.standard.bool(forKey: DefaultsKey.simpleSetupOfferAnswered),
+                     "finishing setup counts the simpler setup offer as answered")
         // A backup made on an older version restores that version's marker.
         fresh.queueWhatsNewIfNeeded(previousVersion: "1.0.0")
         suite.expect(UserDefaults.standard.string(forKey: pendingKey) == nil,

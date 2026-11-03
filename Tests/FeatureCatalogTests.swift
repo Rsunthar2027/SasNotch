@@ -2011,12 +2011,17 @@ enum FeatureCatalogTests {
                 firstRunDefaults.bool(forKey: $0.availabilityKey)
             }) == FeaturePreset.essential.features,
             "a clean install loads only the essential feature set before onboarding")
+            suite.expect(firstRunDefaults.bool(forKey: DefaultsKey.simpleSetupOfferAnswered),
+                   "a clean install starts from the simpler setup and is never offered it")
 
             for feature in AppFeature.allCases {
                 firstRunDefaults.set(true, forKey: feature.availabilityKey)
             }
+            firstRunDefaults.removeObject(forKey: DefaultsKey.simpleSetupOfferAnswered)
             firstRunDefaults.set(2, forKey: DefaultsKey.onboardingStep)
             FeaturePreset.prepareFirstRunAvailability(in: firstRunDefaults)
+            suite.expect(!firstRunDefaults.bool(forKey: DefaultsKey.simpleSetupOfferAnswered),
+                   "only a clean install is marked; an interrupted one is marked when its setup finishes")
             suite.expect(AppFeature.allCases.allSatisfy {
                 firstRunDefaults.bool(forKey: $0.availabilityKey)
             }, "an interrupted onboarding keeps the feature selection already applied")

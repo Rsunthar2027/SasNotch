@@ -2212,9 +2212,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     /// retain their own release gates.
     /// SasNotch shows What's New from its own changelog after an update. The
     /// upstream tours, showcase videos and support invitations described
-    /// another app's releases, so they are not presented.
+    /// another app's releases, so they are not presented. The one-time offer
+    /// of the simpler default setup waits until What's New has closed.
     private func presentUpdateIntros() {
-        _ = showWhatsNewIfNeeded()
+        guard !showWhatsNewIfNeeded() else { return }
+        showSimpleSetupOfferIfNeeded()
+    }
+
+    /// Asks someone who set SasNotch up before the simpler default setup,
+    /// once, whether to switch to it. New installs start from it and are
+    /// marked answered during setup; a Mac whose installs already match it
+    /// counts as answered without being asked. The question is recorded as
+    /// asked before it shows, so a quit or crash while it is up never asks
+    /// again. It waits a moment for launch to settle.
+    private func showSimpleSetupOfferIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard !isTerminating, defaults.bool(forKey: DefaultsKey.hasOnboarded),
+              !defaults.bool(forKey: DefaultsKey.simpleSetupOfferAnswered) else { return }
+        defaults.set(true, forKey: DefaultsKey.simpleSetupOfferAnswered)
+        guard !FeaturePreset.isRecommendedSetup(isAvailable: \.isAvailable) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, !self.isTerminating else { return }
+            self.closePopover()
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = SimpleSetupText.offerTitle
+            alert.informativeText = SimpleSetupText.offerMessage
+            alert.addButton(withTitle: SimpleSetupText.offerSwitch)
+            alert.addButton(withTitle: SimpleSetupText.offerKeep)
+            NSApp.activate(ignoringOtherApps: true)
+            if alert.runModal() == .alertFirstButtonReturn {
+                FeatureRuntime.shared.applyRecommendedSetup()
+            }
+        }
     }
 
     private func brightnessSetupNeeded() -> Bool {
@@ -2798,6 +2828,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         UserDefaults.standard.set(AppInfo.version, forKey: DefaultsKey.lastUpdateIntroVersion)
         UserDefaults.standard.set(BrightnessUpdatePromptInfo.handled,
                                   forKey: DefaultsKey.brightnessUpdatePromptState)
+        // Setup just installed the recommended features; never offer them.
+        UserDefaults.standard.set(true, forKey: DefaultsKey.simpleSetupOfferAnswered)
         markSupportUpdateIntroSeenIfCurrentUpdate()
         markUpdateShowcaseIntroSeenIfCurrentUpdate()
         // A clean install that just saw everything in onboarding should not

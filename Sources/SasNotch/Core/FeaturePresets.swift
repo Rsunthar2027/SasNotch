@@ -17,8 +17,9 @@ enum FeaturePreset: String, CaseIterable, Identifiable {
     /// A clean install starts from the recommended Essential set before any
     /// feature binding runs, written out for every feature so the registered
     /// defaults (which describe an updating Mac's install) never apply to it.
-    /// Updates keep every existing availability choice, and an interrupted
-    /// setup keeps the selection already applied on its purpose step.
+    /// It already has the simpler setup, so it is never offered it. Updates
+    /// keep every existing availability choice, and an interrupted setup
+    /// keeps the selection already applied on its purpose step.
     static func prepareFirstRunAvailability(in defaults: UserDefaults = .standard) {
         guard !defaults.bool(forKey: DefaultsKey.hasOnboarded),
               defaults.integer(forKey: DefaultsKey.onboardingStep) == 0
@@ -27,6 +28,7 @@ enum FeaturePreset: String, CaseIterable, Identifiable {
         for feature in AppFeature.allCases {
             defaults.set(selected.contains(feature), forKey: feature.availabilityKey)
         }
+        defaults.set(true, forKey: DefaultsKey.simpleSetupOfferAnswered)
     }
 
     /// Whether the installed features are exactly the recommended setup, so

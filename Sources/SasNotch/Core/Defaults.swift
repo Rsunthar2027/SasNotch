@@ -21,6 +21,9 @@ enum DefaultsKey {
     static let updateHighlightsSeenVersion = "updateHighlightsSeenVersion"
     static let featureHubKeptFeatures = "featureHubKeptFeatures" // comma-joined AppFeature raw values
     static let featureHubAdvancedExpanded = "featureHubAdvancedExpanded" // the Features page's Advanced section is open
+    // Asked once, after an update, whether to switch to the simpler default
+    // setup. New installs start from it and are marked answered.
+    static let simpleSetupOfferAnswered = "simpleSetupOfferAnswered"
     static let brightnessUpdatePromptState = "brightnessUpdatePromptState"
     static let updateShowcaseIntroVersion = "updateShowcaseIntroVersion"
     static let updateShowcaseMediaOverride = "updateShowcaseMediaOverride"
