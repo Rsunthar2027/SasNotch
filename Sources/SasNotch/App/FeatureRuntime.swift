@@ -371,10 +371,6 @@ final class FeatureRuntime: ObservableObject {
             if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
             else { AgentUsageService.shared.stop() }
         },
-        .notchWatch: {
-            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
-            else { NotchWatchService.shared.stop() }
-        },
         // Leaving folds the wings it rests in, and coming back greets.
         .notchMascot: {
             if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }

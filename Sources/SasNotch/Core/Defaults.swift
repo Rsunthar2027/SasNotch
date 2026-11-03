@@ -865,10 +865,6 @@ enum DefaultsKey {
     static let notchQueueEnabled = "notchQueueEnabled"
     static let notchDownloadsEnabled = "notchDownloadsEnabled"
     static let notchDownloadsFolderBookmark = "notchDownloadsFolderBookmark"
-    // Watch: any part of any window read live in the island.
-    static let notchWatchEnabled = "notchWatchEnabled"
-    static let notchWatchSound = "notchWatchSound"
-    static let notchWatchCondition = "notchWatchCondition"
     static let notchCalendarEnabled = "notchCalendarEnabled"
     static let notchCalendarCountdown = "notchCalendarCountdown"
     static let notchCalendarTimeLeft = "notchCalendarTimeLeft" // the event under way counts down to its end
@@ -1507,9 +1503,6 @@ enum Defaults {
         DefaultsKey.notchLiveEqualizer: true,
         DefaultsKey.notchQueueEnabled: true,
         DefaultsKey.notchDownloadsEnabled: true,
-        DefaultsKey.notchWatchEnabled: true,
-        DefaultsKey.notchWatchSound: true,
-        DefaultsKey.notchWatchCondition: NotchWatchCondition.changes.rawValue,
         DefaultsKey.notchEnabled: false,
         DefaultsKey.notchDisplay: NotchDisplay.automatic.rawValue,
         DefaultsKey.notchSilhouette: NotchSilhouette.capsule.rawValue,
@@ -2016,7 +2009,7 @@ enum Defaults {
         migratePowerPeripheralsVisibility(in: defaults)
         migrateSwitcherPreviewSize(in: defaults)
         migrateSwitcherPreviewExcludedApps(in: defaults)
-        migrateNotchWatchAvailability(in: defaults)
+        removeRetiredNotchWatch(in: defaults)
         defaults.register(defaults: registeredDefaults)
         defaults.register(defaults: AppFeature.availabilityDefaults)
         activateBetaChannelIfRunningBeta(in: defaults)
@@ -2265,14 +2258,29 @@ enum Defaults {
                      forKey: DefaultsKey.scrollInverterHorizontalEnabled)
     }
 
-    /// Watch arrived installed, as one of the island's extensions. Whoever
-    /// left the island out keeps it out: an extension installed on its own
-    /// would bring the Dynamic Island page back to Settings after an update.
-    static func migrateNotchWatchAvailability(in defaults: UserDefaults) {
-        guard defaults.object(forKey: AppFeature.notchWatch.availabilityKey) == nil,
-              defaults.object(forKey: AppFeature.notch.availabilityKey) as? Bool == false
-        else { return }
-        defaults.set(false, forKey: AppFeature.notchWatch.availabilityKey)
+    /// The island's Watch section left the app in 1.2.0. What it saved goes
+    /// with it: its own switches, its install, and its name in the lists of
+    /// island sections. Every step reads before it writes, so a launch that
+    /// finds nothing left changes nothing, and a restored older backup is
+    /// cleaned again on the next launch.
+    static let retiredNotchWatchKeys = ["notchWatchEnabled", "notchWatchSound", "notchWatchCondition",
+                                        DefaultsKey.featureAvailable("notchWatch")]
+
+    static func removeRetiredNotchWatch(in defaults: UserDefaults) {
+        for key in retiredNotchWatchKeys where defaults.object(forKey: key) != nil {
+            defaults.removeObject(forKey: key)
+        }
+        let lists = [(DefaultsKey.notchHiddenModules, "watch"), (DefaultsKey.notchModuleOrder, "watch"),
+                     (DefaultsKey.featureHubKeptFeatures, "notchWatch")]
+        for (key, retired) in lists {
+            guard let saved = defaults.string(forKey: key) else { continue }
+            let items = saved.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+            guard items.contains(retired) else { continue }
+            defaults.set(items.filter { $0 != retired }.joined(separator: ","), forKey: key)
+        }
+        if defaults.string(forKey: DefaultsKey.notchHomeModule) == "watch" {
+            defaults.removeObject(forKey: DefaultsKey.notchHomeModule)
+        }
     }
 
     /// Linear scrolling reached development builds installed, before new

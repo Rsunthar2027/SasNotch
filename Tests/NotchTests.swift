@@ -1805,7 +1805,6 @@ enum NotchTests {
         NotchSectionPagingTests.run(suite)
         NotchKeyboardLightTests.run(suite)
         NotchActivityTests.run(suite)
-        NotchWatchTests.run(suite)
         NotchMascotTests.run(suite)
         NotchMascotHidingContract.run(suite)
         NotchMusicExtrasTests.run(suite)
@@ -2515,10 +2514,12 @@ enum NotchTests {
         defaults.set("clipboard,unknown", forKey: DefaultsKey.notchHiddenModules)
         suite.expect(!NotchSupport.routesClipboardWindow(in: defaults), "hidden clipboard keeps the ordinary history available")
         suite.expect(!NotchSupport.routes(.clipboard, in: defaults), "hidden module cannot leak an activity")
-        defaults.set("system,music,music,unknown", forKey: DefaultsKey.notchModuleOrder)
+        // "watch" names the section that left in 1.2.0; an order saved
+        // before then still reads.
+        defaults.set("system,watch,music,music,unknown", forKey: DefaultsKey.notchModuleOrder)
         defaults.set(true, forKey: DefaultsKey.notchAgentsEnabled)
-        suite.expect(NotchSupport.modules(in: defaults) == [.system, .music, .controls, .mixer, .captures, .files, .tools, .calendar, .notifications, .timer, .camera, .downloads, .scratchpad, .agents, .watch],
-               "module order ignores unknown ids and duplicates, preserving newly added modules")
+        suite.expect(NotchSupport.modules(in: defaults) == [.system, .music, .controls, .mixer, .captures, .files, .tools, .calendar, .notifications, .timer, .camera, .downloads, .scratchpad, .agents],
+               "module order ignores unknown and retired ids and duplicates, preserving newly added modules")
         suite.expect(NotchSupport.routesShelf(in: defaults) && NotchSupport.revealsShelfDrag(in: defaults),
                "the enabled notch replaces the file destination and reveals active drags")
         defaults.set(false, forKey: DefaultsKey.notchDragReveal)

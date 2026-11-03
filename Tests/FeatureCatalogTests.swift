@@ -387,7 +387,7 @@ enum FeatureCatalogTests {
 
         // MARK: Features hub catalog
 
-        suite.expect(AppFeature.allCases.count == 77, "feature catalog has 77 features")
+        suite.expect(AppFeature.allCases.count == 76, "feature catalog has 76 features")
         suite.expect(Set(AppFeature.allCases.map(\.rawValue)).count == AppFeature.allCases.count,
                "feature ids are unique")
         suite.expect(AppFeature.allCases.map(\.rawValue) == [
@@ -400,7 +400,7 @@ enum FeatureCatalogTests {
             "keepAwake", "brightness", "extraBrightness", "bluetoothSleep",
             "quickLauncher", "quickToggles", "colorPicker", "screenOCR", "cleaningMode", "mediaTools",
             "cleaner", "uninstaller", "homebrew", "appUpdates", "screenshot", "cameraPreview",
-            "radialMenu", "scratchpad", "commandBar", "screenRecorder", "wallpaper", "killProcess", "portManager", "notch", "notchCalendar", "notchNotifications", "notchGestures", "notchTimer", "notchAccessories", "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents", "notchWatch", "notchMascot",
+            "radialMenu", "scratchpad", "commandBar", "screenRecorder", "wallpaper", "killProcess", "portManager", "notch", "notchCalendar", "notchNotifications", "notchGestures", "notchTimer", "notchAccessories", "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents", "notchMascot",
             "monitorCPU", "monitorGPU", "monitorMemory", "monitorNetwork", "monitorDisk", "monitorPower",
             "connectedDevices", "fanControl",
         ], "feature ids are stable (they persist inside availability keys)")
@@ -574,7 +574,7 @@ enum FeatureCatalogTests {
             "cleaner", "uninstaller", "homebrew", "appUpdates", "screenshot", "cameraPreview", "radialMenu",
             "scratchpad", "commandBar", "screenRecorder",
             "notch", "notchCalendar", "notchNotifications", "notchGestures", "notchTimer", "notchAccessories",
-            "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents", "notchWatch",
+            "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents",
             "monitorCPU", "monitorGPU", "monitorMemory", "monitorNetwork", "monitorDisk", "monitorPower",
             "connectedDevices",
         ]
@@ -609,34 +609,43 @@ enum FeatureCatalogTests {
             suite.expect(false, "linear scrolling availability suite can be created")
         }
 
-        let watchSuiteName = "com.sasnotch.tests.notch-watch-availability.\(UUID().uuidString)"
+        // Watch left in 1.2.0. What a Mac saved for it goes on the next
+        // launch, and its old ids read as nothing wherever they are stored.
+        let watchSuiteName = "com.sasnotch.tests.notch-watch-removal.\(UUID().uuidString)"
         if let watchDefaults = UserDefaults(suiteName: watchSuiteName) {
-            Defaults.migrateNotchWatchAvailability(in: watchDefaults)
-            suite.expect(watchDefaults.object(forKey: AppFeature.notchWatch.availabilityKey) == nil,
-                   "Watch keeps its installed default where the island was never left out")
-            watchDefaults.set(true, forKey: AppFeature.notch.availabilityKey)
-            Defaults.migrateNotchWatchAvailability(in: watchDefaults)
-            suite.expect(watchDefaults.object(forKey: AppFeature.notchWatch.availabilityKey) == nil,
-                   "an installed island keeps Watch among its extensions")
-            // A first-run setup saved every feature it knew, Watch not yet among them.
-            for feature in AppFeature.features(in: .dynamicIsland) where feature != .notchWatch {
-                watchDefaults.set(false, forKey: feature.availabilityKey)
-            }
-            Defaults.migrateNotchWatchAvailability(in: watchDefaults)
-            let isAvailable: (AppFeature) -> Bool = { feature in
-                watchDefaults.object(forKey: feature.availabilityKey) as? Bool
-                    ?? (AppFeature.availabilityDefaults[feature.availabilityKey] as? Bool ?? false)
-            }
-            suite.expect(watchDefaults.object(forKey: AppFeature.notchWatch.availabilityKey) as? Bool == false
-                    && !FeatureVisibilitySupport.isPageVisible(.notch, isAvailable: isAvailable),
-                   "a setup that left the island out keeps Watch and the Dynamic Island page out after updating")
-            watchDefaults.set(true, forKey: AppFeature.notchWatch.availabilityKey)
-            Defaults.migrateNotchWatchAvailability(in: watchDefaults)
-            suite.expect(watchDefaults.object(forKey: AppFeature.notchWatch.availabilityKey) as? Bool == true,
-                   "a Watch install chosen later is never undone by the migration")
+            for key in Defaults.retiredNotchWatchKeys { watchDefaults.set(true, forKey: key) }
+            watchDefaults.set("music,watch,files", forKey: DefaultsKey.notchHiddenModules)
+            watchDefaults.set("watch,system,music", forKey: DefaultsKey.notchModuleOrder)
+            watchDefaults.set("dockClick,notchWatch", forKey: DefaultsKey.featureHubKeptFeatures)
+            watchDefaults.set("watch", forKey: DefaultsKey.notchHomeModule)
+            watchDefaults.set("controls,music", forKey: DefaultsKey.notchHiddenControls)
+            suite.expect(AppFeature(rawValue: "notchWatch") == nil && NotchModule(rawValue: "watch") == nil
+                    && NotchQuickAction(id: "watch") == nil,
+                   "the retired ids decode to nothing instead of a feature or section")
+            let staleLayout = Data(#"{"buttons":[{"actionID":"watch","id":"00000000-0000-4000-8000-000000000009","label":"","side":"left"},{"actionID":"settings","id":"00000000-0000-4000-8000-000000000003","label":"","side":"right"}],"version":1}"#.utf8)
+            watchDefaults.set(staleLayout, forKey: DefaultsKey.notchQuickAccessLayout)
+            suite.expect(NotchQuickAccessConfiguration.stored(in: watchDefaults).actions == [.settings],
+                   "a saved quick access button for Watch is dropped when the layout is read")
+            watchDefaults.set(true, forKey: AppFeature.monitorCPU.availabilityKey)
+            suite.expect(NotchSupport.modules(in: watchDefaults) == [.system, .controls],
+                   "a saved section order that names Watch still reads, in order, without it")
+            Defaults.removeRetiredNotchWatch(in: watchDefaults)
+            suite.expect(Defaults.retiredNotchWatchKeys.allSatisfy { watchDefaults.object(forKey: $0) == nil },
+                   "the launch cleanup removes Watch's switches and its install")
+            suite.expect(watchDefaults.string(forKey: DefaultsKey.notchHiddenModules) == "music,files"
+                    && watchDefaults.string(forKey: DefaultsKey.notchModuleOrder) == "system,music"
+                    && watchDefaults.string(forKey: DefaultsKey.featureHubKeptFeatures) == "dockClick"
+                    && watchDefaults.object(forKey: DefaultsKey.notchHomeModule) == nil
+                    && watchDefaults.string(forKey: DefaultsKey.notchHiddenControls) == "controls,music",
+                   "the cleanup strips Watch from saved lists and leaves everything else as it was")
+            let cleaned = watchDefaults.persistentDomain(forName: watchSuiteName) ?? [:]
+            Defaults.removeRetiredNotchWatch(in: watchDefaults)
+            suite.expect(NSDictionary(dictionary: cleaned).isEqual(
+                            to: watchDefaults.persistentDomain(forName: watchSuiteName) ?? [:]),
+                   "a second launch finds nothing left to clean")
             watchDefaults.removePersistentDomain(forName: watchSuiteName)
         } else {
-            suite.expect(false, "Watch availability suite can be created")
+            suite.expect(false, "Watch removal suite can be created")
         }
 
         // The Features page offers installed switches that were never turned
@@ -689,7 +698,7 @@ enum FeatureCatalogTests {
                "no hub group is empty")
         suite.expect(AppFeature.features(in: .dynamicIsland) == [
             .notch, .notchCalendar, .notchNotifications, .notchGestures, .notchTimer,
-            .notchAccessories, .notchLyrics, .notchQueue, .notchLiveEqualizer, .notchDownloads, .notchAgents, .notchWatch,
+            .notchAccessories, .notchLyrics, .notchQueue, .notchLiveEqualizer, .notchDownloads, .notchAgents,
             .notchMascot,
         ], "the Dynamic Island heads its own hub section, followed by its extensions")
         suite.expect(AppFeature.dynamicIslandExtensions
@@ -740,8 +749,7 @@ enum FeatureCatalogTests {
                 == [.screenRecording, .accessibility],
                "the recorder choice explains both permissions it needs")
         suite.expect(AppFeature.cleaner.onboardingPermissions.isEmpty
-                && AppFeature.cameraPreview.onboardingPermissions.isEmpty
-                && AppFeature.notchWatch.onboardingPermissions.isEmpty,
+                && AppFeature.cameraPreview.onboardingPermissions.isEmpty,
                "contextual grants are not requested during first setup")
         suite.expect(AppFeature.fanControl.group == .monitor
                 && AppFeature.fanControl.enabledKeys.isEmpty
@@ -1516,7 +1524,6 @@ enum FeatureCatalogTests {
                }
                && !AppFeature.screenshot.monitorsPermissionChanges
                && !AppFeature.screenRecorder.monitorsPermissionChanges
-               && !AppFeature.notchWatch.monitorsPermissionChanges
                && AppFeature.switcher.monitorsPermissionChanges
                && AppFeature.focusFollowsMouse.monitorsPermissionChanges
                && AppFeature.mouseNavigation.monitorsPermissionChanges,

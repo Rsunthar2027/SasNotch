@@ -320,8 +320,6 @@ if (( TEST )); then
         Sources/SasNotch/Services/Notch/NotchQueueSupport.swift
         Sources/SasNotch/Services/Notch/NotchPreferredPlayer.swift
         Sources/SasNotch/Core/NotchFilesStrings.swift
-        Sources/SasNotch/Core/NotchWatchStrings.swift
-        Sources/SasNotch/Services/Notch/NotchWatchSupport.swift
         Sources/SasNotch/Core/NotchMascotStrings.swift
         Sources/SasNotch/Services/Notch/NotchMascotSupport.swift
         Sources/SasNotch/Services/CommandBar/CommandBarDropletMotion.swift

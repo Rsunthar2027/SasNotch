@@ -8,7 +8,7 @@ import Foundation
 import CoreGraphics
 
 enum NotchModule: String, CaseIterable, Identifiable {
-    case controls, mixer, music, clipboard, captures, files, system, tools, calendar, notifications, timer, camera, downloads, scratchpad, agents, watch
+    case controls, mixer, music, clipboard, captures, files, system, tools, calendar, notifications, timer, camera, downloads, scratchpad, agents
     var id: String { rawValue }
 
     var symbol: String {
@@ -31,7 +31,6 @@ enum NotchModule: String, CaseIterable, Identifiable {
         case .tools: return AppFeature.quickLauncher.symbolName
         case .scratchpad: return "note.text"
         case .agents: return "sparkles"
-        case .watch: return "eye"
         }
     }
 
@@ -53,7 +52,6 @@ enum NotchModule: String, CaseIterable, Identifiable {
         case .downloads: return "d"
         case .scratchpad: return "p"
         case .agents: return "g"
-        case .watch: return "o"
         }
     }
 
@@ -76,7 +74,6 @@ enum NotchModule: String, CaseIterable, Identifiable {
         case .files: return AppFeature.shelf.isAvailable(in: defaults)
         case .scratchpad: return AppFeature.scratchpad.isAvailable(in: defaults)
         case .agents: return AppFeature.notchAgents.isAvailable(in: defaults)
-        case .watch: return AppFeature.notchWatch.isAvailable(in: defaults)
         case .system:
             return [.monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork,
                     .monitorDisk, .monitorPower, .fanControl, .connectedDevices].contains { (feature: AppFeature) in
@@ -869,14 +866,13 @@ enum NotchMusicStripLayout {
 }
 
 enum NotchCompactActivity: String, Identifiable {
-    case timer, watch, downloads, agents, calendar, music, keepAwake
+    case timer, downloads, agents, calendar, music, keepAwake
 
     var id: String { rawValue }
 
     func title(_ language: AppLanguage) -> String {
         switch self {
         case .timer: return FeatureStrings.notchActivities(language).timer
-        case .watch: return FeatureStrings.notchWatch(language).title
         case .downloads: return FeatureStrings.notchFiles(language).downloadsTitle
         case .agents: return FeatureStrings.notchAgents(language).title
         case .calendar: return FeatureStrings.notchCalendar(language).title
@@ -889,7 +885,6 @@ enum NotchCompactActivity: String, Identifiable {
     var module: NotchModule {
         switch self {
         case .timer: return .timer
-        case .watch: return .watch
         case .downloads: return .downloads
         case .agents: return .agents
         case .calendar: return .calendar
@@ -1226,14 +1221,6 @@ enum NotchCapsuleLayout {
         let content = calendarDotSide + spacing + width(title, font: titleFont) + groupSpacing
             + width("00:00", font: readingFont) + markSpacing + width(time, font: smallFont)
         return surface(content: content, maximum: Maximum.calendar, geometry: geometry)
-    }
-
-    /// A watched area: its eye, then what it reads now, or a spinner until
-    /// the first reading.
-    static func watchSurface(reading: String, thumbnail: Bool, geometry: NotchGeometry) -> CGSize {
-        let right = thumbnail ? NotchWatchSupport.thumbnailWidth
-            : reading.isEmpty ? spinnerWidth : width(reading, font: levelFont)
-        return surface(content: symbolWidth + spacing + right, maximum: Maximum.activity, geometry: geometry)
     }
 
     /// Screen capture controls folded while an area is chosen: the tool and a chevron.
@@ -1644,14 +1631,13 @@ enum NotchQuickAccessLayout {
 }
 
 enum NotchEvent: String, CaseIterable {
-    case volume, brightness, battery, clipboard, capture, systemNotification, keyboardLight, timer, accessory, download, agents, track, microphone, watch, inputSource, focus, privacy
+    case volume, brightness, battery, clipboard, capture, systemNotification, keyboardLight, timer, accessory, download, agents, track, microphone, inputSource, focus, privacy
 
     var preferenceKey: String {
         switch self {
         case .microphone: return DefaultsKey.notchMicrophone
         case .track: return DefaultsKey.notchTrackChange
         case .timer: return DefaultsKey.notchTimerEnabled
-        case .watch: return DefaultsKey.notchWatchEnabled
         case .accessory: return DefaultsKey.notchAccessoriesEnabled
         case .download: return DefaultsKey.notchDownloadsEnabled
         case .agents: return DefaultsKey.notchAgentsEnabled
@@ -1671,7 +1657,7 @@ enum NotchEvent: String, CaseIterable {
     var priority: Int {
         switch self {
         case .volume, .brightness, .keyboardLight, .microphone, .inputSource: return 3
-        case .capture, .timer, .watch: return 2
+        case .capture, .timer: return 2
         case .battery, .systemNotification, .accessory, .agents, .focus, .privacy: return 1
         case .clipboard, .download, .track: return 0
         }
@@ -1681,7 +1667,7 @@ enum NotchEvent: String, CaseIterable {
         switch self {
         case .volume, .brightness, .keyboardLight, .microphone, .inputSource: return 1.6
         case .systemNotification, .track, .focus, .privacy: return 3
-        case .timer, .download, .watch: return 6
+        case .timer, .download: return 6
         case .agents: return 5
         case .battery, .accessory: return 4
         case .clipboard: return 2.5
@@ -1833,12 +1819,11 @@ enum NotchSupport {
     }
 
     /// Keep Awake comes last: a session can run all day, even more than
-    /// music plays, and it only says that the Mac stays awake. A watch
-    /// follows the timer: the person started both and is waiting on them.
-    static func compactActivities(timer: Bool, watch: Bool = false, downloads: Bool, agents: Bool,
+    /// music plays, and it only says that the Mac stays awake.
+    static func compactActivities(timer: Bool, downloads: Bool, agents: Bool,
                                   calendar: Bool, music: Bool, keepAwake: Bool = false) -> [NotchCompactActivity] {
         let candidates: [(Bool, NotchCompactActivity)] = [
-            (timer, .timer), (watch, .watch), (downloads, .downloads), (agents, .agents),
+            (timer, .timer), (downloads, .downloads), (agents, .agents),
             (calendar, .calendar), (music, .music), (keepAwake, .keepAwake)
         ]
         return candidates.compactMap { $0.0 ? $0.1 : nil }
@@ -1902,7 +1887,6 @@ enum NotchSupport {
                 && ($0 != .calendar || defaults.bool(forKey: DefaultsKey.notchCalendarEnabled))
                 && ($0 != .notifications || defaults.bool(forKey: DefaultsKey.notchNotificationsEnabled))
                 && ($0 != .agents || defaults.bool(forKey: DefaultsKey.notchAgentsEnabled))
-                && ($0 != .watch || defaults.bool(forKey: DefaultsKey.notchWatchEnabled))
         }
     }
 
@@ -2072,7 +2056,6 @@ enum NotchSupport {
         guard isEnabled(in: defaults), defaults.bool(forKey: event.preferenceKey) else { return false }
         switch event {
         case .timer: return NotchTimerSupport.isEnabled(in: defaults)
-        case .watch: return NotchWatchSupport.isEnabled(in: defaults)
         case .accessory: return NotchAccessorySupport.isEnabled(in: defaults)
         case .download: return AppFeature.notchDownloads.isAvailable(in: defaults)
             && modules(in: defaults).contains(.downloads)
@@ -2605,18 +2588,6 @@ struct NotchGeometry: Equatable {
         compact.allowsActivityFooter = false
         return compact
     }
-    /// A watched area keeps its mark and its reading beside the camera,
-    /// never below it, with wings as wide as the reading needs.
-    func compactWatchGeometry(wing: CGFloat) -> NotchGeometry {
-        var compact = self
-        let room = compactSideRoom ?? 0
-        let range = NotchWatchSupport.stripWingRange
-        let fitted = min(range.upperBound, max(range.lowerBound, wing.isFinite ? wing.rounded(.up) : 0))
-        compact.compactSideRoom = room.isFinite && room >= range.lowerBound ? min(fitted, room) : 0
-        compact.minimumCompactWidth = cameraWidth + fitted * 2
-        compact.allowsActivityFooter = false
-        return compact
-    }
     var musicStrip: CGSize {
         let preferred = min(max(layout == .spacious ? 520 : 440, cameraWidth + 88, minimumCompactWidth), screen.width - 24)
         let measuredRoom = compactSideRoom ?? 0
@@ -2833,7 +2804,7 @@ struct NotchGeometry: Equatable {
                 // Only the cards a person chose; a short set leaves a short island.
                 contentHeight = min(budget, agentsHeight.map { $0 > 0 ? $0 : NotchLayout.emptyHeight } ?? budget)
             // Lists and previews fill the chosen content budget.
-            case .mixer, .calendar, .clipboard, .captures, .files, .notifications, .downloads, .camera, .scratchpad, .watch:
+            case .mixer, .calendar, .clipboard, .captures, .files, .notifications, .downloads, .camera, .scratchpad:
                 contentHeight = budget
             }
         }
