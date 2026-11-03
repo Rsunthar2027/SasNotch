@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SasNotch app icon, the sasquatch's face, from ../../sasquatch-icon.svg. SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="100 100 824 824">
+  <path fill="#F3E7D3" d="M 398 474 C 440 462 486 470 512 494 C 538 470 584 462 626 474 C 644 560 604 654 512 660 C 420 654 380 560 398 474 Z"/>
+</svg>

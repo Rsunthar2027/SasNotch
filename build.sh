@@ -695,6 +695,33 @@ swiftc -O -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" -emit-library \
 echo "▸ Generating app icon…"
 swift Tools/MakeIcon.swift build/AppIcon.iconset
 xattr -c -r build/AppIcon.iconset build/AppIcon.icns build/MenuBarIcon.png build/MenuBarIcon@2x.png build/BrandMark.png 2>/dev/null || true
+# The layered icon needs actool from Xcode 26 or later. Without it, or if it
+# cannot compile the bundle, the app ships AppIcon.icns alone, as it always
+# has. Info.plist names AppIcon for both.
+rm -f build/Assets.car build/actool-failure.log
+ACTOOL_BIN="$(xcrun --find actool 2>/dev/null || true)"
+if [[ -n "$ACTOOL_BIN" ]]; then
+    echo "▸ Compiling layered icon…"
+    ICON_TMP="$(mktemp -d)"
+    # actool crashes on File Provider-synced paths, so compile a local copy.
+    ditto Branding/AppIcon.icon "$ICON_TMP/AppIcon.icon"
+    # Newer actool requires the --compile target directory to already exist.
+    mkdir -p "$ICON_TMP/catalog"
+    if "$ACTOOL_BIN" "$ICON_TMP/AppIcon.icon" \
+            --compile "$ICON_TMP/catalog" \
+            --app-icon AppIcon \
+            --platform macosx \
+            --target-device mac \
+            --minimum-deployment-target 14.0 \
+            --enable-on-demand-resources NO \
+            --output-partial-info-plist "$ICON_TMP/partial-info.plist" \
+            >"$ICON_TMP/actool.log" 2>&1 && [[ -s "$ICON_TMP/catalog/Assets.car" ]]; then
+        mv "$ICON_TMP/catalog/Assets.car" build/Assets.car
+    else
+        cp "$ICON_TMP/actool.log" build/actool-failure.log 2>/dev/null || true
+        echo "  layered icon skipped: actool could not compile it (see build/actool-failure.log)"
+    fi
+fi
 echo "▸ Assembling and signing bundle…"
 STAGE_TMP="$(mktemp -d)"
 STAGE="$STAGE_TMP/$APP_NAME.app"
