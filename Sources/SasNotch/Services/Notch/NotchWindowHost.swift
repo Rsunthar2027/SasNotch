@@ -669,6 +669,11 @@ final class NotchWindowHost: NSObject, CAAnimationDelegate {
     private func refreshMissionControlState(now immediate: Bool = false) {
         let now = ProcessInfo.processInfo.systemUptime
         guard immediate || now - lastMissionControlCheck >= missionControlCheckInterval else { return }
+        // The timer keeps its pace, so input is noticed at the next tick. An
+        // overview on screen, or an island hidden for one, is read every time.
+        guard immediate || overviewWasVisible || concealedForMissionControl
+                || NotchOverviewCadence.readIsDue(sinceLastRead: now - lastMissionControlCheck,
+                                                  sinceInput: NotchFrameProbe.secondsSinceInput()) else { return }
         lastMissionControlCheck = now
         // Most of the time no overview is up. Poll less often then, but keep
         // the original restore cadence and immediate checks before revealing.
@@ -923,6 +928,12 @@ private final class NotchFrameProbe {
     static func matches(_ frame: CGRect, _ other: CGRect) -> Bool {
         abs(frame.minX - other.minX) <= 0.5 && abs(frame.minY - other.minY) <= 0.5
             && abs(frame.width - other.width) <= 0.5 && abs(frame.height - other.height) <= 0.5
+    }
+
+    /// Read from the session's event state, which needs no tap and no permission.
+    static func secondsSinceInput() -> TimeInterval {
+        guard let any = CGEventType(rawValue: ~0) else { return 0 }
+        return CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: any)
     }
 
     /// On macOS 27 Mission Control and App Exposé cover the display with a

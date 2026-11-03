@@ -1679,6 +1679,20 @@ enum NotchEvent: String, CaseIterable {
     }
 }
 
+/// How often a resting island reads the window list for Mission Control. The
+/// read is the largest thing a closed island does, and an overview follows a
+/// key, a gesture or the pointer. So reads run at full rate for a few seconds
+/// after input and at a slow rate otherwise, which also bounds the delay when
+/// an overview opens without any input the session can see.
+enum NotchOverviewCadence {
+    static let recentInput: TimeInterval = 3
+    static let quietInterval: TimeInterval = 1
+
+    static func readIsDue(sinceLastRead: TimeInterval, sinceInput: TimeInterval) -> Bool {
+        sinceInput < recentInput || sinceLastRead >= quietInterval
+    }
+}
+
 enum NotchSupport {
     /// Whether a connected display has a camera housing, wherever the island
     /// is: it can be off, withdrawn with the lid closed or on another display.
