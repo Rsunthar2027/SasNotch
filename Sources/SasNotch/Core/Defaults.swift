@@ -25,6 +25,9 @@ enum DefaultsKey {
     // Asked once, after an update, whether to switch to the simpler default
     // setup. New installs start from it and are marked answered.
     static let simpleSetupOfferAnswered = "simpleSetupOfferAnswered"
+    static let liquidGlassMigrationHandled = "liquidGlassMigrationHandled"
+    static let liquidGlassSeenBeforeSupport = "liquidGlassSeenBeforeSupport"
+    static let liquidGlassPendingPrompt = "liquidGlassPendingPrompt"
     static let brightnessUpdatePromptState = "brightnessUpdatePromptState"
     static let updateShowcaseIntroVersion = "updateShowcaseIntroVersion"
     static let updateShowcaseMediaOverride = "updateShowcaseMediaOverride"
@@ -2022,6 +2025,11 @@ enum Defaults {
         migrateNotchAgentsOptIn(in: defaults)
         migrateExistingNotchDefaults(in: defaults)
         migrateLiquidGlassIsland(in: defaults)
+        if #available(macOS 26, *) {
+            LiquidGlassMigration.prepare(in: defaults, supportsGlass: true)
+        } else {
+            LiquidGlassMigration.prepare(in: defaults, supportsGlass: false)
+        }
         migrateFanControlVisibility(in: defaults)
         migrateScrollInverterAxes(in: defaults)
         migrateLinearScrollAvailability(in: defaults)

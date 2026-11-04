@@ -364,6 +364,8 @@ if (( TEST )); then
         Sources/SasNotch/Services/Notch/NotchKeepAwakeSupport.swift
         Sources/SasNotch/Services/Notch/NotchSupport.swift
         Sources/SasNotch/Services/Notch/NotchGlassSupport.swift
+        Sources/SasNotch/Core/LiquidGlassMigration.swift
+        Sources/SasNotch/Core/SimpleSetupText.swift
         Sources/SasNotch/UI/Notch/NotchGlass.swift
         Sources/SasNotch/Services/Notch/NotchAudioLevelSupport.swift
         Sources/SasNotch/Services/Notch/NotchVolumeKeyGate.swift

@@ -2230,29 +2230,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     /// Asks someone who set SasNotch up before the simpler default setup,
-    /// once, whether to switch to it. New installs start from it and are
-    /// marked answered during setup; a Mac whose installs already match it
-    /// counts as answered without being asked. The question is recorded as
-    /// asked before it shows, so a quit or crash while it is up never asks
-    /// again. It waits a moment for launch to settle.
+    /// once, whether to switch to it, and tells them about the move to Liquid
+    /// Glass in the same sheet. New installs start from both and are marked
+    /// answered during setup; a Mac whose installs already match counts as
+    /// answered without being asked. Each is recorded as asked before it
+    /// shows, so a quit or crash while it is up never asks again. It waits a
+    /// moment for launch to settle.
     private func showSimpleSetupOfferIfNeeded() {
         let defaults = UserDefaults.standard
-        guard !isTerminating, defaults.bool(forKey: DefaultsKey.hasOnboarded),
-              !defaults.bool(forKey: DefaultsKey.simpleSetupOfferAnswered) else { return }
-        defaults.set(true, forKey: DefaultsKey.simpleSetupOfferAnswered)
-        guard !FeaturePreset.isRecommendedSetup(isAvailable: \.isAvailable) else { return }
+        guard !isTerminating, defaults.bool(forKey: DefaultsKey.hasOnboarded) else { return }
+        let glass = LiquidGlassMigration.takePendingPrompt(in: defaults)
+        var offersSetup = false
+        if !defaults.bool(forKey: DefaultsKey.simpleSetupOfferAnswered) {
+            defaults.set(true, forKey: DefaultsKey.simpleSetupOfferAnswered)
+            offersSetup = !FeaturePreset.isRecommendedSetup(isAvailable: \.isAvailable)
+        }
+        let alerts = StartupPromptAlert.plan(offersSetup: offersSetup, glass: glass)
+        guard !alerts.isEmpty else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             guard let self, !self.isTerminating else { return }
             self.closePopover()
-            let alert = NSAlert()
-            alert.alertStyle = .informational
-            alert.messageText = SimpleSetupText.offerTitle
-            alert.informativeText = SimpleSetupText.offerMessage
-            alert.addButton(withTitle: SimpleSetupText.offerSwitch)
-            alert.addButton(withTitle: SimpleSetupText.offerKeep)
             NSApp.activate(ignoringOtherApps: true)
-            if alert.runModal() == .alertFirstButtonReturn {
-                FeatureRuntime.shared.applyRecommendedSetup()
+            for plan in alerts {
+                let alert = NSAlert()
+                alert.alertStyle = .informational
+                alert.messageText = plan.title
+                alert.informativeText = plan.message
+                alert.addButton(withTitle: plan.confirm)
+                if let decline = plan.decline { alert.addButton(withTitle: decline) }
+                guard alert.runModal() == .alertFirstButtonReturn else { continue }
+                switch plan.answer {
+                case .switchSetup: FeatureRuntime.shared.applyRecommendedSetup()
+                case .useGlass: AppAppearanceController.shared.notchLiquidGlassEnabled = true
+                case nil: break
+                }
             }
         }
     }

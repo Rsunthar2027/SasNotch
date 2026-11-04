@@ -132,6 +132,7 @@ struct MetricsTests {
             ("agents", { NotchAgentTests.run(suite) }),
             ("mirror-selfie", { MirrorSelfieTests.run(suite) }),
             ("notch-glass", { NotchGlassTests.run(suite) }),
+            ("glass-migration", { LiquidGlassMigrationTests.run(suite) }),
             ("app-icon", { AppIconBundleTests.run(suite) }),
             ("features", {
                 FeatureCatalogTests.run(suite)

@@ -40,7 +40,7 @@ enum NotchGlassText {
     static let regular = "Regular"
     static let clear = "Clear"
     static let styleCaption = "Regular adapts to what's behind the island. Clear lets more of it show through."
-    static let requiresMacOS26 = "Liquid Glass requires macOS 26"
+    static let requiresMacOS26 = "Requires macOS 26 or later."
 }
 
 /// Corner radii that stay concentric with the shape around them, as Apple

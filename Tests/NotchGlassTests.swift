@@ -38,7 +38,7 @@ enum NotchGlassTests {
         suite.expect(NotchGlassStyle.stored(in: defaults) == .clear, "a hand-edited value falls back")
         suite.expect(NotchGlassStyle.regular.title == "Regular" && NotchGlassStyle.clear.title == "Clear"
                      && NotchGlassText.style == "Glass style"
-                     && NotchGlassText.requiresMacOS26 == "Liquid Glass requires macOS 26",
+                     && NotchGlassText.requiresMacOS26 == "Requires macOS 26 or later.",
                      "the setting and the note before macOS 26 read as written")
     }
 
