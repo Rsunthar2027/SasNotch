@@ -307,6 +307,7 @@ if (( TEST )); then
         Sources/SasNotch/UI/Settings/NotchSettingsTabRow.swift
         Sources/SasNotch/Core/NotchActivityStrings.swift
         Sources/SasNotch/Services/Notch/NotchTimerSupport.swift
+        Sources/SasNotch/Services/Notch/NotchTimerPresetSupport.swift
         Sources/SasNotch/Services/Notch/NotchAppFullscreen.swift
         Sources/SasNotch/Services/Notch/NotchTimerAlert.swift
         Sources/SasNotch/UI/Notch/NotchIslandAlert.swift
@@ -314,14 +315,13 @@ if (( TEST )); then
         Sources/SasNotch/Services/LiveActivities/LiveActivitySupport.swift
         Sources/SasNotch/Services/Notch/NotchAccessoryConnectionMonitor.swift
         Sources/SasNotch/Services/QuickTools/CameraPreviewSupport.swift
+        Sources/SasNotch/Services/QuickTools/MirrorSelfieSupport.swift
         Sources/SasNotch/Core/NotchMusicExtrasStrings.swift
         Sources/SasNotch/Core/NotchClipboardSizeStrings.swift
         Sources/SasNotch/Services/Notch/NotchLyricsSupport.swift
         Sources/SasNotch/Services/Notch/NotchQueueSupport.swift
         Sources/SasNotch/Services/Notch/NotchPreferredPlayer.swift
         Sources/SasNotch/Core/NotchFilesStrings.swift
-        Sources/SasNotch/Core/NotchWatchStrings.swift
-        Sources/SasNotch/Services/Notch/NotchWatchSupport.swift
         Sources/SasNotch/Core/NotchMascotStrings.swift
         Sources/SasNotch/Services/Notch/NotchMascotSupport.swift
         Sources/SasNotch/Services/CommandBar/CommandBarDropletMotion.swift
@@ -363,6 +363,10 @@ if (( TEST )); then
         Sources/SasNotch/Services/Notch/NotchCalendarSupport.swift
         Sources/SasNotch/Services/Notch/NotchKeepAwakeSupport.swift
         Sources/SasNotch/Services/Notch/NotchSupport.swift
+        Sources/SasNotch/Services/Notch/NotchGlassSupport.swift
+        Sources/SasNotch/Core/LiquidGlassMigration.swift
+        Sources/SasNotch/Core/SimpleSetupText.swift
+        Sources/SasNotch/UI/Notch/NotchGlass.swift
         Sources/SasNotch/Services/Notch/NotchAudioLevelSupport.swift
         Sources/SasNotch/Services/Notch/NotchVolumeKeyGate.swift
         Sources/SasNotch/Services/Notch/NotchMusicSupport.swift
@@ -611,6 +615,8 @@ if (( TEST )); then
         Sources/SasNotch/Core/PointerDisplayStrings.swift
         Sources/SasNotch/Core/GraphScaleStrings.swift
         Sources/SasNotch/Core/NotchLowBatteryStrings.swift
+        Sources/SasNotch/Services/Notch/ChargeLimitSupport.swift
+        Sources/SasNotch/Services/Notch/NotchTerminalSupport.swift
         Sources/SasNotch/Services/CleaningMode/CleaningUnlockCounter.swift
         Sources/SasNotch/Services/CleaningMode/CleaningMouseReleaseGate.swift
         Sources/SasNotch/Services/Display/ExtraBrightnessSupport.swift
@@ -691,6 +697,33 @@ swiftc -O -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" -emit-library \
 echo "▸ Generating app icon…"
 swift Tools/MakeIcon.swift build/AppIcon.iconset
 xattr -c -r build/AppIcon.iconset build/AppIcon.icns build/MenuBarIcon.png build/MenuBarIcon@2x.png build/BrandMark.png 2>/dev/null || true
+# The layered icon needs actool from Xcode 26 or later. Without it, or if it
+# cannot compile the bundle, the app ships AppIcon.icns alone, as it always
+# has. Info.plist names AppIcon for both.
+rm -f build/Assets.car build/actool-failure.log
+ACTOOL_BIN="$(xcrun --find actool 2>/dev/null || true)"
+if [[ -n "$ACTOOL_BIN" ]]; then
+    echo "▸ Compiling layered icon…"
+    ICON_TMP="$(mktemp -d)"
+    # actool crashes on File Provider-synced paths, so compile a local copy.
+    ditto Branding/AppIcon.icon "$ICON_TMP/AppIcon.icon"
+    # Newer actool requires the --compile target directory to already exist.
+    mkdir -p "$ICON_TMP/catalog"
+    if "$ACTOOL_BIN" "$ICON_TMP/AppIcon.icon" \
+            --compile "$ICON_TMP/catalog" \
+            --app-icon AppIcon \
+            --platform macosx \
+            --target-device mac \
+            --minimum-deployment-target 14.0 \
+            --enable-on-demand-resources NO \
+            --output-partial-info-plist "$ICON_TMP/partial-info.plist" \
+            >"$ICON_TMP/actool.log" 2>&1 && [[ -s "$ICON_TMP/catalog/Assets.car" ]]; then
+        mv "$ICON_TMP/catalog/Assets.car" build/Assets.car
+    else
+        cp "$ICON_TMP/actool.log" build/actool-failure.log 2>/dev/null || true
+        echo "  layered icon skipped: actool could not compile it (see build/actool-failure.log)"
+    fi
+fi
 echo "▸ Assembling and signing bundle…"
 STAGE_TMP="$(mktemp -d)"
 STAGE="$STAGE_TMP/$APP_NAME.app"

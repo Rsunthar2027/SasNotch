@@ -211,3 +211,18 @@ struct ReleaseNoteImage: Equatable {
     let alt: String
     let path: String
 }
+
+/// Where a version's notes live on the website.
+enum UpdateNotesLink {
+    static let title = "What's new"
+
+    /// Nil for anything that isn't a plain version, so a strange tag can't
+    /// produce a strange link.
+    static func url(version: String) -> URL? {
+        let clean = version.hasPrefix("v") ? String(version.dropFirst()) : version
+        guard clean.first?.isNumber == true,
+              clean.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-") })
+        else { return nil }
+        return URL(string: "https://sasnotch.vercel.app/updates#v\(clean)")
+    }
+}

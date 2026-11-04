@@ -400,7 +400,7 @@ enum FeatureCatalogTests {
             "keepAwake", "brightness", "extraBrightness", "bluetoothSleep",
             "quickLauncher", "quickToggles", "colorPicker", "screenOCR", "cleaningMode", "mediaTools",
             "cleaner", "uninstaller", "homebrew", "appUpdates", "screenshot", "cameraPreview",
-            "radialMenu", "scratchpad", "commandBar", "screenRecorder", "wallpaper", "killProcess", "portManager", "notch", "notchCalendar", "notchNotifications", "notchGestures", "notchTimer", "notchAccessories", "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents", "notchWatch", "notchMascot",
+            "radialMenu", "scratchpad", "commandBar", "screenRecorder", "wallpaper", "killProcess", "portManager", "notch", "notchCalendar", "notchNotifications", "notchGestures", "notchTimer", "notchAccessories", "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents", "notchMascot", "notchTerminal",
             "monitorCPU", "monitorGPU", "monitorMemory", "monitorNetwork", "monitorDisk", "monitorPower",
             "connectedDevices", "fanControl",
         ], "feature ids are stable (they persist inside availability keys)")
@@ -574,7 +574,7 @@ enum FeatureCatalogTests {
             "cleaner", "uninstaller", "homebrew", "appUpdates", "screenshot", "cameraPreview", "radialMenu",
             "scratchpad", "commandBar", "screenRecorder",
             "notch", "notchCalendar", "notchNotifications", "notchGestures", "notchTimer", "notchAccessories",
-            "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents", "notchWatch",
+            "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents",
             "monitorCPU", "monitorGPU", "monitorMemory", "monitorNetwork", "monitorDisk", "monitorPower",
             "connectedDevices",
         ]
@@ -589,7 +589,8 @@ enum FeatureCatalogTests {
         suite.expect((AppFeature.availabilityDefaults[AppFeature.linearScroll.availabilityKey] as? Bool) == false
                 && (AppFeature.availabilityDefaults[AppFeature.focusFollowsMouse.availabilityKey] as? Bool) == false
                 && (AppFeature.availabilityDefaults[AppFeature.fanControl.availabilityKey] as? Bool) == false
-                && (AppFeature.availabilityDefaults[AppFeature.notchMascot.availabilityKey] as? Bool) == false,
+                && (AppFeature.availabilityDefaults[AppFeature.notchMascot.availabilityKey] as? Bool) == false
+                && (AppFeature.availabilityDefaults[AppFeature.notchTerminal.availabilityKey] as? Bool) == false,
                "features added after the list was frozen wait on the Features page instead of installing themselves")
         let linearScrollSuiteName = "com.sasnotch.tests.linear-scroll-availability.\(UUID().uuidString)"
         if let linearDefaults = UserDefaults(suiteName: linearScrollSuiteName) {
@@ -609,34 +610,43 @@ enum FeatureCatalogTests {
             suite.expect(false, "linear scrolling availability suite can be created")
         }
 
-        let watchSuiteName = "com.sasnotch.tests.notch-watch-availability.\(UUID().uuidString)"
+        // Watch left in 1.2.0. What a Mac saved for it goes on the next
+        // launch, and its old ids read as nothing wherever they are stored.
+        let watchSuiteName = "com.sasnotch.tests.notch-watch-removal.\(UUID().uuidString)"
         if let watchDefaults = UserDefaults(suiteName: watchSuiteName) {
-            Defaults.migrateNotchWatchAvailability(in: watchDefaults)
-            suite.expect(watchDefaults.object(forKey: AppFeature.notchWatch.availabilityKey) == nil,
-                   "Watch keeps its installed default where the island was never left out")
-            watchDefaults.set(true, forKey: AppFeature.notch.availabilityKey)
-            Defaults.migrateNotchWatchAvailability(in: watchDefaults)
-            suite.expect(watchDefaults.object(forKey: AppFeature.notchWatch.availabilityKey) == nil,
-                   "an installed island keeps Watch among its extensions")
-            // A first-run setup saved every feature it knew, Watch not yet among them.
-            for feature in AppFeature.features(in: .dynamicIsland) where feature != .notchWatch {
-                watchDefaults.set(false, forKey: feature.availabilityKey)
-            }
-            Defaults.migrateNotchWatchAvailability(in: watchDefaults)
-            let isAvailable: (AppFeature) -> Bool = { feature in
-                watchDefaults.object(forKey: feature.availabilityKey) as? Bool
-                    ?? (AppFeature.availabilityDefaults[feature.availabilityKey] as? Bool ?? false)
-            }
-            suite.expect(watchDefaults.object(forKey: AppFeature.notchWatch.availabilityKey) as? Bool == false
-                    && !FeatureVisibilitySupport.isPageVisible(.notch, isAvailable: isAvailable),
-                   "a setup that left the island out keeps Watch and the Dynamic Island page out after updating")
-            watchDefaults.set(true, forKey: AppFeature.notchWatch.availabilityKey)
-            Defaults.migrateNotchWatchAvailability(in: watchDefaults)
-            suite.expect(watchDefaults.object(forKey: AppFeature.notchWatch.availabilityKey) as? Bool == true,
-                   "a Watch install chosen later is never undone by the migration")
+            for key in Defaults.retiredNotchWatchKeys { watchDefaults.set(true, forKey: key) }
+            watchDefaults.set("music,watch,files", forKey: DefaultsKey.notchHiddenModules)
+            watchDefaults.set("watch,system,music", forKey: DefaultsKey.notchModuleOrder)
+            watchDefaults.set("dockClick,notchWatch", forKey: DefaultsKey.featureHubKeptFeatures)
+            watchDefaults.set("watch", forKey: DefaultsKey.notchHomeModule)
+            watchDefaults.set("controls,music", forKey: DefaultsKey.notchHiddenControls)
+            suite.expect(AppFeature(rawValue: "notchWatch") == nil && NotchModule(rawValue: "watch") == nil
+                    && NotchQuickAction(id: "watch") == nil,
+                   "the retired ids decode to nothing instead of a feature or section")
+            let staleLayout = Data(#"{"buttons":[{"actionID":"watch","id":"00000000-0000-4000-8000-000000000009","label":"","side":"left"},{"actionID":"settings","id":"00000000-0000-4000-8000-000000000003","label":"","side":"right"}],"version":1}"#.utf8)
+            watchDefaults.set(staleLayout, forKey: DefaultsKey.notchQuickAccessLayout)
+            suite.expect(NotchQuickAccessConfiguration.stored(in: watchDefaults).actions == [.settings],
+                   "a saved quick access button for Watch is dropped when the layout is read")
+            watchDefaults.set(true, forKey: AppFeature.monitorCPU.availabilityKey)
+            suite.expect(NotchSupport.modules(in: watchDefaults) == [.system, .controls],
+                   "a saved section order that names Watch still reads, in order, without it")
+            Defaults.removeRetiredNotchWatch(in: watchDefaults)
+            suite.expect(Defaults.retiredNotchWatchKeys.allSatisfy { watchDefaults.object(forKey: $0) == nil },
+                   "the launch cleanup removes Watch's switches and its install")
+            suite.expect(watchDefaults.string(forKey: DefaultsKey.notchHiddenModules) == "music,files"
+                    && watchDefaults.string(forKey: DefaultsKey.notchModuleOrder) == "system,music"
+                    && watchDefaults.string(forKey: DefaultsKey.featureHubKeptFeatures) == "dockClick"
+                    && watchDefaults.object(forKey: DefaultsKey.notchHomeModule) == nil
+                    && watchDefaults.string(forKey: DefaultsKey.notchHiddenControls) == "controls,music",
+                   "the cleanup strips Watch from saved lists and leaves everything else as it was")
+            let cleaned = watchDefaults.persistentDomain(forName: watchSuiteName) ?? [:]
+            Defaults.removeRetiredNotchWatch(in: watchDefaults)
+            suite.expect(NSDictionary(dictionary: cleaned).isEqual(
+                            to: watchDefaults.persistentDomain(forName: watchSuiteName) ?? [:]),
+                   "a second launch finds nothing left to clean")
             watchDefaults.removePersistentDomain(forName: watchSuiteName)
         } else {
-            suite.expect(false, "Watch availability suite can be created")
+            suite.expect(false, "Watch removal suite can be created")
         }
 
         // The Features page offers installed switches that were never turned
@@ -689,16 +699,18 @@ enum FeatureCatalogTests {
                "no hub group is empty")
         suite.expect(AppFeature.features(in: .dynamicIsland) == [
             .notch, .notchCalendar, .notchNotifications, .notchGestures, .notchTimer,
-            .notchAccessories, .notchLyrics, .notchQueue, .notchLiveEqualizer, .notchDownloads, .notchAgents, .notchWatch,
-            .notchMascot,
+            .notchAccessories, .notchLyrics, .notchQueue, .notchLiveEqualizer, .notchDownloads, .notchAgents,
+            .notchMascot, .notchTerminal,
         ], "the Dynamic Island heads its own hub section, followed by its extensions")
         suite.expect(AppFeature.dynamicIslandExtensions
                 == Array(AppFeature.features(in: .dynamicIsland).dropFirst()),
                "the Dynamic Island's extensions are every other feature of its section")
         suite.expect(AppFeature.notch.initialInstallGroup
-                        == AppFeature.features(in: .dynamicIsland).filter { $0 != .notchMascot && $0 != .notchAgents }
+                        == AppFeature.features(in: .dynamicIsland).filter {
+                            $0 != .notchMascot && $0 != .notchAgents && $0 != .notchTerminal
+                        }
                      && AppFeature.mixer.initialInstallGroup == [.mixer],
-                     "choosing the island keeps Agents and the companion as separate installs")
+                     "choosing the island keeps Agents, the companion and the terminal as separate installs")
         suite.expect(AppFeature.dynamicIslandExtensions.contains(.notchMascot)
                         && !AppFeature.notch.initialInstallGroup.contains(.notchMascot)
                         && AppFeature.notchMascot.permissions.isEmpty
@@ -740,8 +752,7 @@ enum FeatureCatalogTests {
                 == [.screenRecording, .accessibility],
                "the recorder choice explains both permissions it needs")
         suite.expect(AppFeature.cleaner.onboardingPermissions.isEmpty
-                && AppFeature.cameraPreview.onboardingPermissions.isEmpty
-                && AppFeature.notchWatch.onboardingPermissions.isEmpty,
+                && AppFeature.cameraPreview.onboardingPermissions.isEmpty,
                "contextual grants are not requested during first setup")
         suite.expect(AppFeature.fanControl.group == .monitor
                 && AppFeature.fanControl.enabledKeys.isEmpty
@@ -1516,7 +1527,6 @@ enum FeatureCatalogTests {
                }
                && !AppFeature.screenshot.monitorsPermissionChanges
                && !AppFeature.screenRecorder.monitorsPermissionChanges
-               && !AppFeature.notchWatch.monitorsPermissionChanges
                && AppFeature.switcher.monitorsPermissionChanges
                && AppFeature.focusFollowsMouse.monitorsPermissionChanges
                && AppFeature.mouseNavigation.monitorsPermissionChanges,
@@ -2004,12 +2014,17 @@ enum FeatureCatalogTests {
                 firstRunDefaults.bool(forKey: $0.availabilityKey)
             }) == FeaturePreset.essential.features,
             "a clean install loads only the essential feature set before onboarding")
+            suite.expect(firstRunDefaults.bool(forKey: DefaultsKey.simpleSetupOfferAnswered),
+                   "a clean install starts from the simpler setup and is never offered it")
 
             for feature in AppFeature.allCases {
                 firstRunDefaults.set(true, forKey: feature.availabilityKey)
             }
+            firstRunDefaults.removeObject(forKey: DefaultsKey.simpleSetupOfferAnswered)
             firstRunDefaults.set(2, forKey: DefaultsKey.onboardingStep)
             FeaturePreset.prepareFirstRunAvailability(in: firstRunDefaults)
+            suite.expect(!firstRunDefaults.bool(forKey: DefaultsKey.simpleSetupOfferAnswered),
+                   "only a clean install is marked; an interrupted one is marked when its setup finishes")
             suite.expect(AppFeature.allCases.allSatisfy {
                 firstRunDefaults.bool(forKey: $0.availabilityKey)
             }, "an interrupted onboarding keeps the feature selection already applied")
@@ -2019,10 +2034,70 @@ enum FeatureCatalogTests {
         }
         for preset in FeaturePreset.allCases {
             suite.expect(preset.enableKeys.allSatisfy { key in
-                       preset.features.contains { $0.enabledKeys.contains(key) }
+                       preset.features.contains { $0.enabledKeys.contains(key) || $0.initialEnableKeys.contains(key) }
                    },
                    "preset enable keys belong to its own features (\(preset.rawValue))")
         }
+
+        // MARK: The simpler default setup
+
+        let core = AppFeature.coreIslandFeatures
+        let more = AppFeature.moreCoreFeatures
+        suite.expect(core == [.notch, .mixer, .clipboardHistory, .shelf,
+                              .monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork, .monitorDisk, .monitorPower,
+                              .notchCalendar, .notchNotifications, .notchTimer, .cameraPreview, .notchDownloads,
+                              .notchAgents]
+                && AppFeature.allCases.allSatisfy { $0.isLocked == core.contains($0) },
+               "the features behind the island's 12 core tiles are exactly the locked ones")
+        suite.expect(more == [.switcher, .windowLayout, .keepAwake, .brightness, .screenshot, .screenOCR,
+                              .colorPicker, .textSnippets, .finderCutPaste, .dockPreview, .uninstaller, .micMute]
+                && AppFeature.recommendedTools == [.switcher, .windowLayout, .keepAwake, .brightness],
+               "the twelve More tools keep their order, and the first four are the recommended ones")
+        suite.expect(Set(core).isDisjoint(with: more)
+                && core.count + more.count + AppFeature.advancedFeatures.count == AppFeature.allCases.count
+                && AppFeature.allCases.allSatisfy {
+                    ($0.hubSection == .core) == core.contains($0) && ($0.hubSection == .more) == more.contains($0)
+                },
+               "every feature sits in exactly one of the Features page's three sections")
+        suite.expect(FeatureGroup.withAdvancedFeatures.allSatisfy { group in
+                    AppFeature.advancedFeatures.contains { $0.group == group }
+                } && Set(AppFeature.advancedFeatures.map(\.group)) == Set(FeatureGroup.withAdvancedFeatures),
+               "Advanced lists every group that has an advanced feature, and no empty one")
+        let coreSuiteName = "com.sasnotch.tests.core-tiles.\(UUID().uuidString)"
+        if let coreDefaults = UserDefaults(suiteName: coreSuiteName) {
+            // Every feature written out: registered defaults are shared by the
+            // whole process, and another check may have registered installs.
+            for feature in AppFeature.allCases {
+                coreDefaults.set(core.contains(feature), forKey: feature.availabilityKey)
+            }
+            let coreTiles: [NotchModule] = [.controls, .mixer, .music, .clipboard, .files, .system, .calendar,
+                                            .notifications, .timer, .camera, .downloads, .agents]
+            suite.expect(NotchModule.allCases.filter { $0.isAvailable(in: coreDefaults) } == coreTiles,
+                   "the locked features alone make the island's 12 core tiles available")
+            coreDefaults.removePersistentDomain(forName: coreSuiteName)
+        } else {
+            suite.expect(false, "core tiles suite can be created")
+        }
+        suite.expect(FeaturePreset.essential.features == Set(core + AppFeature.recommendedTools),
+               "a new install gets the core tiles and the four recommended tools, and nothing else")
+        suite.expect(Set(FeaturePreset.essential.enableKeys) == [
+                    DefaultsKey.notchEnabled, DefaultsKey.clipboardHistoryEnabled, DefaultsKey.shelfEnabled,
+                    DefaultsKey.notchCalendarEnabled, DefaultsKey.notchNotificationsEnabled,
+                    DefaultsKey.notchTimerEnabled, DefaultsKey.notchDownloadsEnabled, DefaultsKey.notchAgentsEnabled,
+                    DefaultsKey.switcherEnabled, DefaultsKey.windowLayoutShortcutsEnabled,
+                    DefaultsKey.brightnessControlEnabled,
+                ],
+               "the recommended setup switches on every core tile and the four tools' main controls")
+        suite.expect(FeaturePreset.isRecommendedSetup(isAvailable: FeaturePreset.essential.features.contains)
+                && !FeaturePreset.isRecommendedSetup(isAvailable: { $0 != .notchAgents
+                    && FeaturePreset.essential.features.contains($0) })
+                && !FeaturePreset.isRecommendedSetup(isAvailable: { _ in true }),
+               "only exactly the recommended installs count as the recommended setup")
+        let lockRuntimeSource = (try? String(contentsOfFile: "Sources/SasNotch/App/FeatureRuntime.swift",
+                                             encoding: .utf8)) ?? ""
+        suite.expect(lockRuntimeSource.contains("return available ? feature.isHardwareSupported : !feature.isLocked")
+                && lockRuntimeSource.contains("func applyRecommendedSetup() {\n        apply(.essential)\n    }"),
+               "the one install gate refuses to uninstall a locked tile, and reset reuses the preset path")
         suite.expect(AppFeature.monitorCPU.energyProfile == .periodic
                 && AppFeature.clipboardHistory.energyProfile == .periodic
                 && AppFeature.mouseAcceleration.energyProfile == .idle
@@ -2034,7 +2109,8 @@ enum FeatureCatalogTests {
                 && AppFeature.musicBlock.energyProfile == .keyboard
                 && AppFeature.colorPicker.energyProfile == .idle
                 && AppFeature.keepAwake.energyProfile == .idle
-                && AppFeature.scratchpad.energyProfile == .idle,
+                && AppFeature.scratchpad.energyProfile == .idle
+                && AppFeature.notchTerminal.energyProfile == .idle,
                "energy badges tell the honest mechanism per feature")
         let brightnessEnergyKeys = [DefaultsKey.brightnessKeysEnabled, DefaultsKey.brightnessOSDEnabled,
                                     DefaultsKey.brightnessKeyStep]

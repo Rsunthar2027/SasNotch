@@ -31,6 +31,7 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchTimerSoundEnabled) private var timerSoundEnabled = true
     @AppStorage(DefaultsKey.notchHideTimerCountdown) private var hideTimerCountdown = false
     @AppStorage(DefaultsKey.notchCameraEnabled) private var cameraEnabled = true
+    @AppStorage(DefaultsKey.notchSelfieSavesToDownloads) private var selfieSavesToDownloads = false
     @AppStorage(DefaultsKey.notchAccessoriesEnabled) private var accessoriesEnabled = true
     @AppStorage(DefaultsKey.notchCalendarEnabled) private var calendarEnabled = true
     @AppStorage(DefaultsKey.notchCalendarCountdown) private var calendarCountdown = false
@@ -39,7 +40,6 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchCalendarTimeLeft) private var calendarTimeLeft = false
     @AppStorage(DefaultsKey.notchCalendarWeekNumbers) private var calendarWeekNumbers = false
     @AppStorage(DefaultsKey.notchAgentsEnabled) private var agentsEnabled = false
-    @AppStorage(DefaultsKey.notchWatchEnabled) private var watchEnabled = true
     @AppStorage(DefaultsKey.notchLyricsEnabled) private var lyricsEnabled = true
     @AppStorage(DefaultsKey.notchLyricsOnline) private var lyricsOnline = false
     @AppStorage(DefaultsKey.notchBrowserCovers) private var browserCovers = false
@@ -89,6 +89,8 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchLowBatteryEarly) private var earlyBatteryWarning = false
     @AppStorage(DefaultsKey.notchLowBatteryEarlyThreshold) private var earlyBatteryThreshold = NotchSupport.defaultEarlyBatteryThreshold
     @AppStorage(DefaultsKey.notchLowBatteryMenuBar) private var lowBatteryMenuBar = true
+    @AppStorage(DefaultsKey.notchChargeLimitEnabled) private var chargeLimitEnabled = false
+    @AppStorage(DefaultsKey.notchChargeLimitPercent) private var chargeLimitPercent = ChargeLimitSupport.defaultLimit
     @AppStorage(DefaultsKey.notchHiddenControls) private var hiddenControls = NotchControlItem.defaultHidden
     @AppStorage(DefaultsKey.notchControlOrder) private var controlOrder = ""
     @AppStorage(DefaultsKey.notchShowInCaptures) private var showInCaptures = true
@@ -117,6 +119,7 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchHapticFeedback) private var hapticFeedback = true
     @AppStorage(DefaultsKey.notchTranslucentBackground) private var translucentBackground = true
     @AppStorage(DefaultsKey.notchLiquidGlassEnabled) private var liquidGlass = false
+    @AppStorage(DefaultsKey.notchGlassStyle) private var glassStyle = NotchGlassStyle.fallback.rawValue
     @AppStorage(DefaultsKey.notchShelf) private var shelfWindow = true
     @AppStorage(DefaultsKey.notchDragReveal) private var dragReveal = true
     @AppStorage(DefaultsKey.notchCaptureControls) private var captureControls = true
@@ -149,6 +152,7 @@ struct NotchSettings: View {
          String(customWidth), String(customHeight), String(cameraFitWidth), String(cameraFitHeight),
          String(compactExtraWidth), String(compactExtraHeight), String(compactCornerRadius), String(expandedCornerRadius),
          String(lockScreen), String(lockWeather), lockWeatherCity, String(lockBattery),
+         String(chargeLimitEnabled), String(chargeLimitPercent),
          String(focusEnabled), focusShortcut, String(privacyEnabled),
          String(capsuleFitWidth), String(capsuleFitHeight), String(capsuleFitDrop), String(hapticFeedback),
          String(shelfWindow), String(dragReveal), String(captureControls), String(quickPanel), String(appPanel),
@@ -159,7 +163,7 @@ struct NotchSettings: View {
          String(microphone), String(battery), String(clipboard), String(clipboardWindow), clipboardCardSize,
          String(capture), String(trackChange), captureAction, String(showInCaptures),
          String(returnHome), homeModule, String(opensActivity), String(scratchpad),
-         String(agentsEnabled), String(watchEnabled), String(keepAwakeActivity), String(shortcutEnabled)]
+         String(agentsEnabled), String(keepAwakeActivity), String(shortcutEnabled), glassStyle]
     }
 
     private var access: Binding<NotchQuickAccessConfiguration> {
@@ -548,6 +552,8 @@ struct NotchSettings: View {
                 Button(l10n.s.permissionRequest, action: permissions.requestCamera)
                 Button(l10n.s.permissionOpenSettings, action: permissions.openCameraSettings)
             }
+            switchRow("square.and.arrow.down", MirrorSelfieText.saveToDownloads,
+                      caption: MirrorSelfieText.saveToDownloadsCaption, isOn: $selfieSavesToDownloads)
         case .files:
             destination(text.files, symbol: "tray.full", value: $shelfWindow, available: AppFeature.shelf.isAvailable)
             if shelfWindow { switchRow("hand.draw", text.dragReveal, isOn: $dragReveal) }
@@ -585,9 +591,8 @@ struct NotchSettings: View {
             destination(FeatureStrings.scratchpad(l10n.language).pageTitle, symbol: "note.text", value: $scratchpad)
         case .agents:
             NotchAgentsSettingsControls()
-        case .watch:
-            NotchWatchSettingsControls()
-                .toggleStyle(TrailingSwitchToggleStyle())
+        case .terminal:
+            Text(NotchTerminalText.settingsCaption).font(.callout).foregroundStyle(.secondary)
         case .mixer, .system, .tools:
             EmptyView()
         }
@@ -686,6 +691,8 @@ struct NotchSettings: View {
                 if accessoriesEnabled { Text(FeatureStrings.notchActivities(l10n.language).accessoryDescription).font(.caption).foregroundStyle(.secondary) }
                 if enabled, (volume || brightness || keyboardLight), !permissions.accessibility { PermissionRow(kind: .accessibility) }
             }
+            // A Mac without a battery has no charge to cap.
+            if PowerSampler.hasInternalBattery { chargeLimitCard }
             let locked = FeatureStrings.notchLockScreen(l10n.language)
             SettingsCard(title: locked.title) {
                 switchRow("lock.display", locked.show, caption: locked.showHint, isOn: $lockScreen)
@@ -848,7 +855,34 @@ struct NotchSettings: View {
         }
     }
 
-    private func levelSlider(_ title: String, range: ClosedRange<Int>, value: Binding<Int>) -> some View {
+    /// A reminder to unplug at a chosen charge. SasNotch only reads the
+    /// charge, so the card says plainly that it cannot hold the Mac there.
+    private var chargeLimitCard: some View {
+        SettingsCard(title: ChargeLimitText.title) {
+            switchRow("powerplug", ChargeLimitText.toggle, caption: ChargeLimitText.caption, isOn: $chargeLimitEnabled)
+            if chargeLimitEnabled {
+                levelSlider(ChargeLimitText.limit, range: ChargeLimitSupport.range, step: ChargeLimitSupport.step,
+                            value: Binding(get: { ChargeLimitSupport.sanitizedLimit(chargeLimitPercent) },
+                                           set: { chargeLimitPercent = ChargeLimitSupport.sanitizedLimit($0) }))
+                if permissions.notifications == .denied {
+                    Text(ChargeLimitText.notificationsOff).font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Text(ChargeLimitText.limitation).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            // Offered only where this Mac's own Battery pane says it opens
+            // from that address.
+            if ChargeLimitSupport.batteryPaneAvailable, let url = ChargeLimitSupport.batteryPaneURL {
+                Button(ChargeLimitText.openBatterySettings) { NSWorkspace.shared.open(url) }
+            }
+        }
+        .onChange(of: chargeLimitEnabled) { _, enabled in
+            if enabled { Notifier.requestPermission() }
+        }
+    }
+
+    private func levelSlider(_ title: String, range: ClosedRange<Int>, step: Int = 1, value: Binding<Int>) -> some View {
         let formatted = "\(value.wrappedValue)%"
         let slider = Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = Int($0.rounded()) })
         return VStack(alignment: .leading, spacing: 6) {
@@ -857,7 +891,7 @@ struct NotchSettings: View {
                 Spacer()
                 Text(formatted).monospacedDigit().foregroundStyle(.secondary)
             }
-            Slider(value: slider, in: Double(range.lowerBound)...Double(range.upperBound), step: 1) {
+            Slider(value: slider, in: Double(range.lowerBound)...Double(range.upperBound), step: Double(step)) {
                 Text(title)
             }.labelsHidden().accessibilityValue(formatted)
         }.padding(.leading, settingsRowTextInset)
@@ -960,7 +994,7 @@ struct NotchSettings: View {
         case .downloads: return .notchDownloads
         case .scratchpad: return .scratchpad
         case .agents: return .notchAgents
-        case .watch: return .notchWatch
+        case .terminal: return .notchTerminal
         }
     }
 
@@ -1173,7 +1207,7 @@ struct NotchSettings: View {
         Binding {
             (module != .timer || timerEnabled) && (module != .camera || cameraEnabled)
                 && (module != .calendar || calendarEnabled) && (module != .notifications || notificationsEnabled)
-                && (module != .agents || agentsEnabled) && (module != .watch || watchEnabled)
+                && (module != .agents || agentsEnabled)
                 && !hidden.split(separator: ",").contains(Substring(module.rawValue))
         } set: { shown in
             if module == .timer { timerEnabled = shown }
@@ -1181,7 +1215,6 @@ struct NotchSettings: View {
             if module == .calendar { calendarEnabled = shown }
             if module == .notifications { notificationsEnabled = shown }
             if module == .agents { agentsEnabled = shown }
-            if module == .watch { watchEnabled = shown }
             var values = Set(hidden.split(separator: ",").map(String.init))
             if shown { values.remove(module.rawValue) } else { values.insert(module.rawValue) }
             hidden = values.sorted().joined(separator: ",")

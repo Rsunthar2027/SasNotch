@@ -112,7 +112,6 @@ def main():
           # The first line alone tells it from the one-line didStopWith callback.
           + declaration(recorder, "    func captureEngine(_ engine: RecorderCaptureEngine,\n")
           + "}\n}\n")
-    watch = "Sources/SasNotch/Services/Notch/NotchWatchService.swift"
     artwork = "Sources/SasNotch/Services/Notch/NotchBrowserArtwork.swift"
     write("NotchBrowserArtworkLifecycle.swift", "import Foundation\n"
           + "extension NotchBrowserArtworkLifecycleTests {\nfinal class Service: Fixture {\n"
@@ -122,12 +121,8 @@ def main():
                                    "    private func attempt(", "    private func retry(",
                                    "    private func store(", "    private func finish(", "    private func download("])
           + "}\n}\n")
-    write("NotchWatchChoice.swift", "import AppKit\nimport Foundation\n"
-          + "extension NotchWatchChoiceTests {\nfinal class Service: Fixture {\n"
-          + declaration(watch, "    func chooseArea()")
-          + declaration(watch, "    private func watch(").replace("private func", "@MainActor func", 1)
-          + declaration(watch, "    func stop()")
-          + "}\n}\n")
+    # Watch left the app; an earlier build's copy would no longer compile.
+    (OUTPUT / "NotchWatchChoice.swift").unlink(missing_ok=True)
     write("SwitcherAccessibilitySnapshot.swift", "import ApplicationServices\nimport CoreGraphics\nimport Foundation\n"
           + "extension SwitcherAccessibilitySnapshotTests.Reader {\n"
           + "".join(declaration("Sources/SasNotch/Services/Switcher/WindowEnumerator.swift", prefix)

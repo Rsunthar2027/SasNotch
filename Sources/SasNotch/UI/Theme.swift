@@ -148,10 +148,16 @@ private struct PanelCardModifier: ViewModifier {
     var padded = true
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.notchPresentation) private var notchPresentation
+    @Environment(\.notchTileRadius) private var tileRadius
 
     func body(content: Content) -> some View {
         if notchPresentation {
-            content.padding(padded ? 12 : 0).modifier(NotchControlSurface(cornerRadius: 18, interactive: interactive))
+            // Whatever lies inside the card keeps its corners concentric with it.
+            let padding: CGFloat = padded ? 12 : 0
+            content
+                .environment(\.notchTileRadius, NotchGlassGeometry.innerRadius(cardRadius: min(18, tileRadius), padding: padding))
+                .padding(padding)
+                .modifier(NotchControlSurface(cornerRadius: 18, interactive: interactive))
         } else {
         content
             .padding(padded ? 10 : 0)

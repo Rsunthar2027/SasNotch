@@ -661,6 +661,10 @@ struct UpdatesView: View {
                     }
                     .buttonStyle(.borderedProminent)
                 }
+
+                if case let .available(version) = updates.state, let notes = UpdateNotesLink.url(version: version) {
+                    Link(UpdateNotesLink.title, destination: notes)
+                }
             }
 
             if let lastChecked = updates.lastChecked {

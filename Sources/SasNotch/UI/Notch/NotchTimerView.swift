@@ -15,6 +15,7 @@ struct NotchTimerView: View {
     @AppStorage(DefaultsKey.notchPomodoroLongBreakInterval) private var longBreakInterval = 4
     @AppStorage(DefaultsKey.notchPomodoroTotalSessions) private var totalSessions = 4
     @AppStorage(DefaultsKey.notchTimerMinutes) private var savedMinutes = 15
+    @AppStorage(DefaultsKey.notchTimerPresets) private var presetData = Data()
     @Namespace private var modeSelection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.notchBand) private var band
@@ -70,12 +71,87 @@ struct NotchTimerView: View {
                 case .stopwatch:
                     Spacer(minLength: 0)
                 }
-                clock(setupClock, size: 26)
+                if mode == .timer {
+                    // The presets sit under the clock, in the ruler's row,
+                    // so the page keeps its height.
+                    VStack(spacing: 2) {
+                        clock(setupClock, size: 26)
+                        presetMenu
+                    }
+                } else {
+                    clock(setupClock, size: 26)
+                }
             }
             .frame(height: rulerHeight)
             if mode == .pomodoro {
                 pomodoroSettings
                     .frame(height: NotchLayout.timerSettingsRowHeight)
+            }
+        }
+    }
+
+    /// The presets as a native menu: one choice starts that countdown, named
+    /// after it. The user's own follow the built-in ones, and the last
+    /// entries add one or open one to rename, retime or delete.
+    private var presetMenu: some View {
+        NotchMenuButton(title: TimerPresetText.presets, items: presetItems) {
+            HStack(spacing: NotchTimerSupport.ModePicker.menuSpacing) {
+                Text(TimerPresetText.presets)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .frame(height: 22)
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .help(TimerPresetText.presetsHint)
+    }
+
+    private var presetItems: [NotchMenuItem] {
+        let custom = NotchTimerPresets.decode(presetData)
+        let locale = Locale(identifier: l10n.language.rawValue)
+        let start = { (preset: NotchTimerPreset) -> NotchMenuItem in
+            NotchMenuItem(title: TimerPresetText.menuTitle(
+                preset.name, NotchTimerSupport.compactText(Double(preset.minutes) * 60, locale: locale))) {
+                service.start(preset)
+            }
+        }
+        var items = NotchTimerPresets.builtIns.map(start)
+        if !custom.isEmpty {
+            items.append(.separator)
+            items.append(contentsOf: custom.map(start))
+        }
+        items.append(.separator)
+        items.append(NotchMenuItem(title: TimerPresetText.newPreset,
+                                   enabled: NotchTimerPresets.canAdd(to: custom)) { editPreset(nil) })
+        if !custom.isEmpty {
+            items.append(NotchMenuItem(title: TimerPresetText.editPreset, submenu: custom.map { preset in
+                NotchMenuItem(title: preset.name + "…") { editPreset(preset) }
+            }))
+        }
+        return items
+    }
+
+    /// The dialog opens once the menu has closed, as the Scratchpad's rename
+    /// does, and a new preset starts at the ruler's length. The list is read
+    /// again afterwards, so the save lands on what is stored now.
+    private func editPreset(_ preset: NotchTimerPreset?) {
+        let minutes = timerMinutes.wrappedValue
+        DispatchQueue.main.async {
+            let outcome = NotchTimerPresetEditor.run(editing: preset, minutes: minutes,
+                                                     above: NotchService.shared.presentationWindow)
+            let custom = NotchTimerPresets.custom()
+            switch outcome {
+            case .save(let saved):
+                NotchTimerPresets.save(NotchTimerPresets.saving(saved, in: custom))
+            case .delete:
+                guard let preset else { return }
+                NotchTimerPresets.save(NotchTimerPresets.deleting(preset.id, from: custom))
+            case .cancel:
+                return
             }
         }
     }
@@ -124,7 +200,7 @@ struct NotchTimerView: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
             }
-            .foregroundStyle(.white.opacity(0.85))
+            .foregroundStyle(.primary)
             .padding(.horizontal, NotchTimerSupport.ModePicker.labelPadding)
             .frame(height: 28)
             .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -153,7 +229,7 @@ struct NotchTimerView: View {
                     Text(title(for: candidate))
                         .font(.system(size: NotchTimerSupport.ModePicker.labelSize, weight: .medium))
                         .lineLimit(1)
-                        .foregroundStyle(selected ? .white : .white.opacity(0.5))
+                        .foregroundStyle(selected ? .primary : .secondary)
                         .padding(.horizontal, NotchTimerSupport.ModePicker.labelPadding)
                         .frame(height: NotchTimerSupport.ModePicker.height)
                         .overlay(alignment: .bottom) {
@@ -207,18 +283,18 @@ struct NotchTimerView: View {
 
     private var phaseTitle: String {
         service.session.cycleFinished ? text.pomodoroFinished
-            : service.session.completed ? text.finished : text.phase(service.session.phase)
+            : service.session.completed ? text.finished : NotchTimerSupport.title(for: service.session, text: text)
     }
 
-    /// The phase, and a Pomodoro's place in its cycle, on one line where
-    /// they fit and on two short ones where they do not.
+    /// The phase, and a Pomodoro's place in its cycle or a finished preset's
+    /// name, on one line where they fit and on two short ones where they do not.
     private var phaseReading: some View {
         let title = phaseTitle
         let progress = service.session.mode == .pomodoro
             ? String(format: text.sessionProgress, service.session.sessionNumber, service.session.configuration.totalSessions)
-            : nil
-        let phase = Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.orange)
-        let place = progress.map { Text($0).font(.system(size: 12)).monospacedDigit().foregroundStyle(.secondary) }
+            : service.session.completed ? service.session.label : nil
+        let phase = Text(title).font(.body.weight(.semibold)).foregroundStyle(.orange)
+        let place = progress.map { Text($0).font(.callout).monospacedDigit().foregroundStyle(.secondary) }
         return ViewThatFits(in: .horizontal) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 phase
@@ -276,7 +352,7 @@ struct NotchTimerView: View {
                     .lineLimit(1).truncationMode(.tail)
                 HStack(spacing: 3) {
                     Text(display(option, current))
-                        .font(.system(size: 12, weight: .semibold)).monospacedDigit().foregroundStyle(.orange)
+                        .font(.callout.weight(.semibold)).monospacedDigit().foregroundStyle(.orange)
                     Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).foregroundStyle(.secondary)
                 }
             }

@@ -31,13 +31,18 @@ final class NotchTimerService: ObservableObject {
         scheduleCompletion()
     }
 
-    func start(mode: NotchTimerMode, minutes: Int) {
+    func start(mode: NotchTimerMode, minutes: Int, label: String? = nil) {
         guard !suspended, NotchTimerSupport.isEnabled() else { return }
         guard !session.hasSession else { return }
         alert.stop()
-        session.start(mode: mode, minutes: minutes, now: now, configuration: .load())
+        session.start(mode: mode, minutes: minutes, now: now, configuration: .load(), label: label)
         scheduleCompletion()
         NotchService.shared.reactMascot(.ready)
+    }
+
+    /// A preset is a countdown named after it, whatever mode the page shows.
+    func start(_ preset: NotchTimerPreset) {
+        start(mode: .timer, minutes: preset.minutes, label: preset.name)
     }
 
     func pauseOrResume() {
@@ -84,7 +89,7 @@ final class NotchTimerService: ObservableObject {
         let reaction = NotchMascotSupport.timerReaction(finishing: session.phase)
         NotchService.shared.show(NotchNotice(event: .timer,
             title: session.cycleFinished ? text.pomodoroFinished : text.finished,
-            detail: text.phase(session.phase), symbol: "timer", mascot: reaction))
+            detail: NotchTimerSupport.title(for: session, text: text), symbol: "timer", mascot: reaction))
         // It takes the news in the notice, or where it is when the notice cannot show.
         NotchService.shared.reactMascot(reaction)
         alert.start(enabled: NotchTimerSupport.isSoundEnabled())

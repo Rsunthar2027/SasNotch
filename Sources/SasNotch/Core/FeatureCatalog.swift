@@ -32,15 +32,26 @@ enum AppFeature: String, CaseIterable {
          commandBar, screenRecorder, wallpaper, killProcess, portManager
     // Dynamic Island, then its extensions
     case notch, notchCalendar, notchNotifications, notchGestures, notchTimer, notchAccessories, notchLyrics,
-         notchQueue, notchLiveEqualizer, notchDownloads, notchAgents, notchWatch, notchMascot
+         notchQueue, notchLiveEqualizer, notchDownloads, notchAgents, notchMascot, notchTerminal
     // System monitor, one entry per metric family (temperatures live with
     // their parent metric: CPU temp with CPU, battery temp with power).
     case monitorCPU, monitorGPU, monitorMemory, monitorNetwork, monitorDisk, monitorPower, connectedDevices, fanControl
 }
 
-/// Hub sections, in display order.
+/// Hub groups, in display order. Inside Advanced on the Features page.
 enum FeatureGroup: String, CaseIterable {
     case windowsDock, mouseKeyboard, clipboardFiles, sound, energyDisplay, tools, dynamicIsland, monitor
+
+    /// The groups Advanced shows: those with at least one advanced feature.
+    static var withAdvancedFeatures: [FeatureGroup] {
+        allCases.filter { group in AppFeature.advancedFeatures.contains { $0.group == group } }
+    }
+}
+
+/// The Features page's three sections, top to bottom: the island's locked
+/// core tiles, twelve more tools, and everything else under Advanced.
+enum FeatureHubSection: Hashable {
+    case core, more, advanced
 }
 
 /// System permissions surfaced by the hub's transparency portal.
@@ -81,10 +92,9 @@ extension AppFeature {
                     && !WindowEdgeSnapZone.enabledZones(
                         from: edgeSnapDisabledZones
                     ).isEmpty)
-        // Watch asks when an area is chosen and checks on every reading. The
-        // companion uses no permission at all.
-        case .screenOCR, .cleaningMode, .screenshot, .commandBar, .screenRecorder, .wallpaper, .notchWatch,
-             .notchMascot:
+        // The companion and the terminal use no permission at all.
+        case .screenOCR, .cleaningMode, .screenshot, .commandBar, .screenRecorder, .wallpaper,
+             .notchMascot, .notchTerminal:
             return false
         default:
             return true
@@ -119,8 +129,8 @@ extension AppFeature {
              .scratchpad, .commandBar, .screenRecorder, .wallpaper, .killProcess, .portManager:
             return .tools
         case .notch, .notchCalendar, .notchNotifications, .notchGestures, .notchTimer, .notchAccessories,
-             .notchLyrics, .notchQueue, .notchLiveEqualizer, .notchDownloads, .notchAgents, .notchWatch,
-             .notchMascot:
+             .notchLyrics, .notchQueue, .notchLiveEqualizer, .notchDownloads, .notchAgents,
+             .notchMascot, .notchTerminal:
             return .dynamicIsland
         case .monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork, .monitorDisk, .monitorPower,
              .connectedDevices, .fanControl:
@@ -194,8 +204,8 @@ extension AppFeature {
         case .notchNotifications: return "bell"
         case .notchCalendar: return "calendar"
         case .notchAgents: return "sparkles"
-        case .notchWatch: return "eye"
         case .notchMascot: return "face.smiling"
+        case .notchTerminal: return "terminal"
         case .notch: return "macbook"
         case .radialMenu: return "circle.grid.cross"
         case .scratchpad: return "note.text"
@@ -268,7 +278,6 @@ extension AppFeature {
         case .notchNotifications: return [DefaultsKey.notchNotificationsEnabled]
         case .notchCalendar: return [DefaultsKey.notchCalendarEnabled]
         case .notchAgents: return [DefaultsKey.notchAgentsEnabled]
-        case .notchWatch: return [DefaultsKey.notchWatchEnabled]
         case .notchMascot: return [DefaultsKey.notchMascotEnabled]
         case .notch: return [DefaultsKey.notchEnabled]
         case .radialMenu: return [DefaultsKey.radialMenuEnabled]
@@ -291,7 +300,9 @@ extension AppFeature {
              .cleaner, .uninstaller, .homebrew, .appUpdates, .screenshot, .cameraPreview, .scratchpad,
              .commandBar, .screenRecorder, .wallpaper, .killProcess, .portManager,
              .monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork, .monitorDisk, .monitorPower,
-             .connectedDevices, .fanControl:
+             .connectedDevices, .fanControl,
+             // Installing it is the switch: the page runs nothing until a command is typed.
+             .notchTerminal:
             return []
         }
     }
@@ -301,7 +312,7 @@ extension AppFeature {
     /// audio priority, whose output and input controls work together. The
     /// live equalizer stays off: it asks for system audio recording on the
     /// first song, so only the user's own switch turns it on.
-    private var initialEnableKeys: [String] {
+    var initialEnableKeys: [String] {
         switch self {
         case .windowLayout: return [DefaultsKey.windowLayoutShortcutsEnabled]
         case .audioPriority: return enabledKeys
@@ -338,13 +349,13 @@ extension AppFeature {
         case .notchAgents: return []
         // It only draws, and hears of what happens from the island itself.
         case .notchMascot: return []
+        // Commands run as the user, who already owns whatever they reach;
+        // Open in Terminal hands a folder to Terminal without scripting it.
+        case .notchTerminal: return []
         // The bars read the player's own audio output, which macOS gates
         // behind the same permission the mixer and the recorder ask for.
         case .notchLiveEqualizer: return [.audioCapture]
         case .notchDownloads: return [.filesAndFolders]
-        // The chosen area is read with the screen capture other tools use,
-        // and the alert becomes a notification where the island is hidden.
-        case .notchWatch: return [.screenRecording, .notifications]
         case .notchNotifications: return [.accessibility]
         case .notchCalendar: return [.calendar]
         case .notch: return [.accessibility, .automationPlayback]
@@ -398,7 +409,7 @@ extension AppFeature {
         switch self {
         case .keepAwake, .brightness, .radialMenu, .quickToggles, .cleaner,
              .uninstaller, .homebrew, .appUpdates, .mixer, .cameraPreview,
-             .micMute, .musicBlock, .notchWatch:
+             .micMute, .musicBlock:
             return []
         default:
             return permissions.filter { $0 == .accessibility || $0 == .screenRecording }
@@ -409,6 +420,40 @@ extension AppFeature {
         allCases.filter { $0.group == group }
     }
 
+    /// The features behind the island's 12 core tiles, in the order the
+    /// Features page lists them: Controls and Now Playing are the island
+    /// itself, Volume mixer, Clipboard, Files, System (the six metric
+    /// monitors), Calendar, Notifications, Timer, Mirror, Downloads and AI
+    /// Agents. They are locked: no surface uninstalls them and every preset
+    /// keeps them. A Mac set up before the lock may lack one, and the page
+    /// then offers it like any other install.
+    static let coreIslandFeatures: [AppFeature] = [
+        .notch, .mixer, .clipboardHistory, .shelf,
+        .monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork, .monitorDisk, .monitorPower,
+        .notchCalendar, .notchNotifications, .notchTimer, .cameraPreview, .notchDownloads, .notchAgents,
+    ]
+
+    var isLocked: Bool { Self.coreIslandFeatures.contains(self) }
+
+    /// Twelve more tools on the main Features page, in this order. The first
+    /// four come installed and switched on; the others are one switch away.
+    static let moreCoreFeatures: [AppFeature] = [
+        .switcher, .windowLayout, .keepAwake, .brightness, .screenshot, .screenOCR,
+        .colorPicker, .textSnippets, .finderCutPaste, .dockPreview, .uninstaller, .micMute,
+    ]
+
+    static var recommendedTools: [AppFeature] { Array(moreCoreFeatures.prefix(4)) }
+
+    /// Everything else, under a collapsed Advanced section.
+    static var advancedFeatures: [AppFeature] {
+        allCases.filter { $0.hubSection == .advanced }
+    }
+
+    var hubSection: FeatureHubSection {
+        if isLocked { return .core }
+        return Self.moreCoreFeatures.contains(self) ? .more : .advanced
+    }
+
     /// The Dynamic Island's extensions: everything else in its group. They
     /// do nothing without the island, so uninstalling it offers to take them
     /// along.
@@ -416,10 +461,11 @@ extension AppFeature {
         features(in: .dynamicIsland).filter { $0 != .notch }
     }
 
-    /// Agents reads local session histories, and the companion changes the
-    /// resting island. Both are separate choices when installing the island.
+    /// Agents reads local session histories, the companion changes the
+    /// resting island, and the terminal runs commands. Each is a separate
+    /// choice when installing the island.
     static var dynamicIslandInitialExtensions: [AppFeature] {
-        dynamicIslandExtensions.filter { $0 != .notchMascot && $0 != .notchAgents }
+        dynamicIslandExtensions.filter { $0 != .notchMascot && $0 != .notchAgents && $0 != .notchTerminal }
     }
 
     var initialInstallGroup: [AppFeature] {
@@ -480,12 +526,12 @@ extension AppFeature {
              .cleaner, .uninstaller, .homebrew, .appUpdates, .screenshot, .cameraPreview, .radialMenu,
              .scratchpad, .commandBar, .screenRecorder,
              .notch, .notchCalendar, .notchNotifications, .notchGestures, .notchTimer, .notchAccessories,
-             .notchLyrics, .notchQueue, .notchLiveEqualizer, .notchDownloads, .notchAgents, .notchWatch,
+             .notchLyrics, .notchQueue, .notchLiveEqualizer, .notchDownloads, .notchAgents,
              .monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork, .monitorDisk, .monitorPower,
              .connectedDevices:
             return true
         case .focusFollowsMouse, .scrollHorizontal, .linearScroll, .diskImageInstaller, .audioPriority,
-             .wallpaper, .killProcess, .portManager, .fanControl, .notchMascot, .spacesOrder:
+             .wallpaper, .killProcess, .portManager, .fanControl, .notchMascot, .spacesOrder, .notchTerminal:
             return false
         }
     }
@@ -513,9 +559,6 @@ extension AppFeature {
                 return !(stringFor(DefaultsKey.notchHiddenModules) ?? "").split(separator: ",").contains("music")
             case (.switcher, .screenRecording):
                 return !boolFor(DefaultsKey.switcherSimpleMode)
-            case (.notchWatch, .screenRecording):
-                return isAvailable(.notch) && boolFor(DefaultsKey.notchEnabled)
-                    && !(stringFor(DefaultsKey.notchHiddenModules) ?? "").split(separator: ",").contains("watch")
             case (.notchNotifications, .accessibility):
                 return isAvailable(.notch) && boolFor(DefaultsKey.notchEnabled)
                     && !(stringFor(DefaultsKey.notchHiddenModules) ?? "").split(separator: ",").contains("notifications")

@@ -23,7 +23,7 @@ struct NotchMusicView: View {
     private var text: RadialMenuFeatureStrings { FeatureStrings.radialMenu(l10n.language) }
     /// The cover's own colour, used for the moving parts that belong to this
     /// track. Neutral covers keep them white.
-    private var accent: Color { service.artworkTint?.color ?? .white }
+    private var accent: Color { service.artworkTint?.color ?? .primary }
     private var showsLyrics: Bool { lyricsEnabled && AppFeature.notchLyrics.isAvailable }
     private var showsQueue: Bool { queueEnabled && AppFeature.notchQueue.isAvailable }
     private var showsVolume: Bool { showVolume && AppFeature.mixer.isAvailable }
@@ -178,7 +178,7 @@ struct NotchMusicView: View {
                     }
                     // Where the song's artist goes: which app the buttons open.
                     if opens {
-                        Text(openTitle).font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
+                        Text(openTitle).font(.body).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
             } accessory: {
@@ -193,7 +193,7 @@ struct NotchMusicView: View {
                     }
                 } else {
                     Text(FeatureStrings.notch(l10n.language).musicHint)
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .font(.callout).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .frame(maxWidth: .infinity)
@@ -284,7 +284,7 @@ struct NotchMusicView: View {
                         .help(playback.track.title ?? text.mediaNowPlaying)
                     Text(service.commandFailed ? FeatureStrings.notchMusicExtras(l10n.language).playbackFailed
                          : playback.track.artist ?? playback.track.album ?? text.mediaNowPlaying)
-                        .font(.system(size: 13))
+                        .font(.body)
                         .foregroundStyle(service.commandFailed ? .orange : .secondary)
                         .lineLimit(1)
                 }
@@ -296,7 +296,7 @@ struct NotchMusicView: View {
                 // Quiet beside the song, as the timeline's times are. The
                 // bars rest flat while paused, so the title keeps its width.
                 NotchLiveEqualizerBars(isPlaying: playback.isPlaying, bars: 4, barWidth: 2.5, height: 15,
-                                       tint: .white.opacity(0.5))
+                                       tint: Color.primary.opacity(0.5))
                 if band.besideCamera { sectionsButton }
             } corner: {
                 extraButtons
@@ -336,7 +336,7 @@ struct NotchMusicView: View {
                 if let icon {
                     Image(nsImage: icon).resizable().interpolation(.high)
                 } else {
-                    Image(systemName: "app").font(.system(size: 13)).foregroundStyle(.secondary)
+                    Image(systemName: "app").font(.body).foregroundStyle(.secondary)
                 }
             }
             .frame(width: 18, height: 18)
@@ -374,7 +374,7 @@ struct NotchMusicView: View {
         .menuStyle(.borderlessButton)
         .frame(maxWidth: 110)
         .fixedSize()
-        .font(.system(size: 10, weight: .medium))
+        .font(.caption.weight(.medium))
         .foregroundStyle(.secondary)
         .accessibilityLabel(extras.playbackSource)
         .accessibilityValue([service.sourceIsAutomatic ? extras.automaticSource : nil,
@@ -397,6 +397,7 @@ private struct NotchMusicSideButton: View {
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.notchGlassSurface) private var glassSurface
     private let height: CGFloat = 44
     private let plate: CGFloat = 32
 
@@ -404,15 +405,18 @@ private struct NotchMusicSideButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(active ? tint : .white.opacity(isEnabled ? 0.55 : 0.3))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(active ? AnyShapeStyle(tint)
+                                 : isEnabled ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: plate, height: plate)
-                .background(.white.opacity(active ? 0.12 : 0), in: Circle())
+                .notchGlass(Circle(), offGlass: active ? 0.12 : 0,
+                            tint: active ? NotchGlassTint.selection : nil, selected: active, id: "notch.music.\(symbol)")
                 .animation(reduceMotion ? nil : .smooth(duration: 0.22), value: active)
                 .frame(width: height, height: height)
                 .contentShape(Circle())
         }
-        .buttonStyle(NotchButtonStyle(cornerRadius: height / 2))
+        .buttonStyle(NotchButtonStyle(cornerRadius: height / 2, lifts: !glassSurface))
         .help(hint ?? title)
         .accessibilityLabel(title)
         .accessibilityHint(hint ?? "")
@@ -461,7 +465,7 @@ private struct NotchMusicOutputButton: View {
         NotchMenuButton(title: l10n.s.mixerSystemOutputTitle, items: items, cornerRadius: 22) {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.secondary)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
         }
@@ -496,7 +500,7 @@ struct NotchMusicIdleTransport: View {
         Button { NotchPreferredPlayer.open() } label: {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .frame(width: height, height: height)
                 .contentShape(Circle())
         }
@@ -580,7 +584,7 @@ private struct NotchMusicTransport: View {
         } label: {
             Image(systemName: showsPlaying ? "pause.fill" : "play.fill")
                 .font(.system(size: compact ? 22 : slot == nil ? 26 : 28, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .contentTransition(.symbolEffect(.replace))
                 .animation(reduceMotion ? nil : .smooth(duration: 0.22), value: showsPlaying)
                 .frame(width: height, height: height)
@@ -610,7 +614,7 @@ private struct NotchMusicTransport: View {
         Button { service.send(command, context: playback.commandContext) } label: {
             Image(systemName: symbol)
                 .font(.system(size: compact ? 16 : 19, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .frame(width: height, height: height)
                 .contentShape(Circle())
         }
@@ -624,7 +628,7 @@ private struct NotchMusicTransport: View {
 struct NotchMusicTimeline: View {
     let playback: NotchPlayback
     @ObservedObject var service: NotchMusicService
-    var tint: Color = .white
+    var tint: Color = .primary
     /// The island's player sets the times beside the bar, as a phone's
     /// island does, which leaves its short row room for the artist.
     var timesBeside = false
@@ -664,7 +668,7 @@ struct NotchMusicTimeline: View {
                         }
                     }
                 }
-                .font(.system(size: 10, weight: .medium))
+                .font(.caption.weight(.medium))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
             }
@@ -787,12 +791,12 @@ struct NotchMusicControlsView: View {
         Button { notch.select(.music) } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(music.playback?.track.title ?? (music.awaitingPlayback ? text.mediaNowPlaying : text.mediaNothingPlaying))
-                    .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    .font(.body.weight(.semibold)).lineLimit(1)
                 if artist {
                     Text(music.commandFailed ? FeatureStrings.notchMusicExtras(l10n.language).playbackFailed
                          : music.playback?.track.artist ?? music.playback?.track.album
                             ?? (music.awaitingPlayback ? "" : FeatureStrings.notch(l10n.language).musicHint))
-                        .font(.system(size: 11))
+                        .font(.subheadline)
                         .foregroundStyle(music.commandFailed ? .orange : .secondary)
                         .lineLimit(1)
                 }

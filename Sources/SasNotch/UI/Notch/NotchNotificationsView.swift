@@ -17,17 +17,17 @@ struct NotchNotificationsView: View {
             if !permissions.accessibility {
                 VStack(alignment: .leading, spacing: 10) {
                     PermissionRow(kind: .accessibility)
-                    Text(text.privacy).font(.callout).foregroundStyle(.white.opacity(0.7))
+                    Text(text.privacy).font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } else if service.items.isEmpty {
                 HStack(spacing: 14) {
-                    Image(systemName: "bell").font(.system(size: 26, weight: .light)).foregroundStyle(.white.opacity(0.6))
+                    Image(systemName: "bell").font(.largeTitle.weight(.light)).foregroundStyle(.secondary)
                         .frame(width: 56, height: 56)
-                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     VStack(alignment: .leading, spacing: 4) {
                         Text(service.monitoring ? text.empty : text.waiting).font(.headline)
-                        Text(text.privacy).font(.caption).foregroundStyle(.white.opacity(0.65))
+                        Text(text.privacy).font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -105,12 +105,12 @@ private struct NotchNotificationRow: View {
                 NotchIconButton(symbol: "xmark", title: text.dismiss) { service.dismiss(item.id) }
                     .disabled(service.openingID == item.id)
             }
-            .font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
+            .font(.subheadline).foregroundStyle(.secondary)
             .frame(height: 22)
-            Text(item.content.title).font(.system(size: 13, weight: .semibold)).lineLimit(2)
-            if !item.content.subtitle.isEmpty { Text(item.content.subtitle).font(.system(size: 12)).lineLimit(1) }
+            Text(item.content.title).font(.body.weight(.semibold)).lineLimit(2)
+            if !item.content.subtitle.isEmpty { Text(item.content.subtitle).font(.callout).lineLimit(1) }
             if !item.content.body.isEmpty {
-                Text(item.content.body).font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
+                Text(item.content.body).font(.callout).foregroundStyle(.primary)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
@@ -120,7 +120,7 @@ private struct NotchNotificationRow: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+        .modifier(NotchControlSurface(cornerRadius: 14, interactive: false))
         .clipped()
         .accessibilityElement(children: .contain)
     }
@@ -144,14 +144,14 @@ struct NotchNotificationPreviewView: View {
             HStack(spacing: 8) {
                 NotchNotificationAppIcon(app: content.app, size: NotchNotificationPreviewLayout.iconSize)
                 Text(content.app.isEmpty ? text.title : content.app)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if let item {
                     Text(item.received, format: .dateTime.hour().minute())
-                        .font(.system(size: 11)).monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.45))
+                        .font(.subheadline).monospacedDigit()
+                        .foregroundStyle(.tertiary)
                 }
                 NotchIconButton(symbol: "xmark", title: text.dismiss) { service.dismissNotification(notice) }
             }
@@ -164,13 +164,13 @@ struct NotchNotificationPreviewView: View {
             if !content.subtitle.isEmpty {
                 Text(content.subtitle)
                     .font(Font(NotchNotificationPreviewLayout.subtitleFont as CTFont))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(.primary)
                     .lineLimit(NotchNotificationPreviewLayout.subtitleLines)
             }
             if !content.body.isEmpty {
                 Text(content.body)
                     .font(Font(NotchNotificationPreviewLayout.bodyFont as CTFont))
-                    .foregroundStyle(.white.opacity(0.82))
+                    .foregroundStyle(.primary)
                     .lineLimit(NotchNotificationPreviewLayout.bodyLines)
                     .textSelection(.enabled)
             }
@@ -185,11 +185,11 @@ struct NotchNotificationPreviewView: View {
                 if notifications.items.count > 1 {
                     Button { service.open(.notifications) } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: "tray.full").font(.system(size: 11, weight: .medium))
+                            Image(systemName: "tray.full").font(.subheadline.weight(.medium))
                             Text(notifications.items.count, format: .number)
-                                .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                                .font(.subheadline.weight(.semibold)).monospacedDigit()
                         }
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(.primary)
                         .padding(.horizontal, 10)
                         .frame(height: 24)
                         .contentShape(Capsule())
@@ -225,9 +225,9 @@ struct NotchNotificationAppIcon: View {
             } else {
                 Image(systemName: "bell.badge.fill")
                     .font(.system(size: size * 0.48, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(.primary)
                     .frame(width: size, height: size)
-                    .background(.white.opacity(0.09), in: RoundedRectangle(cornerRadius: size * 0.24))
+                    .background(.primary.opacity(0.09), in: RoundedRectangle(cornerRadius: size * 0.24))
             }
         }
         .frame(width: size, height: size)

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SasNotch app icon, the sasquatch's eyes, nose and mouth, from ../../sasquatch-icon.svg. SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="100 100 824 824">
+  <g fill="#5B3A22">
+    <circle cx="462" cy="530" r="22"/>
+    <circle cx="562" cy="530" r="22"/>
+    <ellipse cx="512" cy="582" rx="40" ry="20"/>
+  </g>
+  <path d="M 474 620 Q 512 644 550 620" fill="none" stroke="#5B3A22" stroke-width="16" stroke-linecap="round"/>
+</svg>

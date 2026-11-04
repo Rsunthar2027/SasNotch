@@ -239,6 +239,8 @@ struct NotchMusicCover: View {
     let artwork: NSImage?
     let side: CGFloat
     let radius: CGFloat
+    @Environment(\.notchGlassSurface) private var glassSurface
+    private var well: Color { glassSurface ? Color.primary.opacity(0.08) : .black }
     /// The player whose icon stands in for a missing cover; see NotchArtwork.
     var source: RadialNowPlayingSnapshot? = nil
 
@@ -247,11 +249,11 @@ struct NotchMusicCover: View {
             if let artwork {
                 Image(nsImage: artwork).resizable().scaledToFill()
             } else if let icon = source.flatMap(RadialNowPlayingApplication.icon(for:)) {
-                Color.black.overlay {
+                well.overlay {
                     Image(nsImage: icon).resizable().interpolation(.high).scaledToFit().padding(side * 0.08)
                 }
             } else {
-                Color.black.overlay { Image(systemName: "music.note").foregroundStyle(.secondary) }
+                well.overlay { Image(systemName: "music.note").foregroundStyle(.secondary) }
             }
         }
         .frame(width: side, height: side)

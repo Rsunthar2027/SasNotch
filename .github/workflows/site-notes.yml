@@ -1,0 +1,26 @@
+name: Update the website's notes
+
+# The website reads GitHub Releases when it builds, so a new deploy is all it
+# needs. release.yml publishes with GITHUB_TOKEN, which doesn't trigger this
+# event, so it calls the same hook itself; this covers a release published by hand.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the Vercel deploy hook
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [[ -z "$HOOK" ]]; then
+            echo "::notice::VERCEL_DEPLOY_HOOK isn't set, so the website wasn't rebuilt."
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 30 -X POST "$HOOK" > /dev/null

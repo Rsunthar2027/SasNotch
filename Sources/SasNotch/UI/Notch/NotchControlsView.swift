@@ -35,10 +35,15 @@ struct NotchControlsView: View {
                     NotchMusicControlsView(notch: service, height: layout.cardRow).frame(height: layout.cardRow)
                 }
                 if layout.shortcutRows > 0 {
-                    NotchRail(items: shortcuts, rows: layout.shortcutRows, itemWidth: NotchLayout.shortcutWidth,
-                              width: size.width, spacing: NotchLayout.shortcutSpacing,
-                              leastSpacing: NotchLayout.shortcutLeastSpacing, rowSpacing: layout.shortcutRowSpacing) { item in
-                        shortcut(item)
+                    // The tiles' lenses share one container, so they blend as
+                    // the rail changes.
+                    NotchGlassGroup(spacing: NotchLayout.shortcutSpacing) {
+                        NotchRail(items: shortcuts, rows: layout.shortcutRows, itemWidth: NotchLayout.shortcutWidth,
+                                  width: size.width, spacing: NotchLayout.shortcutSpacing,
+                                  leastSpacing: NotchLayout.shortcutLeastSpacing, rowSpacing: layout.shortcutRowSpacing) { item in
+                            shortcut(item)
+                                .environment(\.notchGlassTileID, "notch.tile.\(item.rawValue)")
+                        }
                     }
                 }
             }
@@ -71,12 +76,13 @@ struct NotchControlsView: View {
                 SettingsRouter.shared.request(AppFeature.brightness.settingsDestination)
                 (NSApp.delegate as? AppDelegate)?.openSettingsWindow()
             }
-        }.buttonStyle(.plain).foregroundStyle(.secondary).font(.system(size: 11))
-        let sun = Image(systemName: "sun.max.fill").font(.system(size: 12, weight: .medium)).frame(width: 18)
+        }.buttonStyle(.plain).foregroundStyle(.secondary).font(.subheadline)
+        let sun = Image(systemName: "sun.max.fill").font(.callout.weight(.medium))
+            .symbolRenderingMode(.hierarchical).frame(width: 18)
         return ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
                 sun
-                Text(FeatureStrings.notch(l10n.language).brightness).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                Text(FeatureStrings.notch(l10n.language).brightness).font(.callout.weight(.semibold)).lineLimit(1)
                 Spacer(minLength: 4)
                 settings
             }
@@ -175,8 +181,9 @@ struct NotchAudioControls: View {
             if let muted = mixer.systemOutputMuted { adjustOutput(muted: !muted) }
         } label: {
             Image(systemName: mixer.systemOutputMuted == true ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(mixer.systemOutputMuted == true ? Color.red : Color.white)
+                .font(.callout.weight(.medium))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(mixer.systemOutputMuted == true ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
                 .contentTransition(.symbolEffect(.replace))
                 .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: mixer.systemOutputMuted)
                 .frame(width: 18, height: 18)
@@ -195,7 +202,7 @@ struct NotchAudioControls: View {
                              label: FeatureStrings.notch(l10n.language).volume, trackThickness: 8, easesChanges: true)
                 .frame(height: 24)
         } else {
-            Text(l10n.s.mixerOutputUnavailable).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(l10n.s.mixerOutputUnavailable).font(.caption).foregroundStyle(.secondary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
         }
@@ -308,7 +315,8 @@ private struct NotchBrightnessControls: View {
     /// Volume leads with its mute button; the sun keeps that button's width
     /// so both sliders start on the same line.
     private var glyph: some View {
-        Image(systemName: "sun.max.fill").font(.system(size: 12, weight: .medium)).frame(width: 18)
+        Image(systemName: "sun.max.fill").font(.callout.weight(.medium)).symbolRenderingMode(.hierarchical)
+            .frame(width: 18)
     }
 
     private func displayItems(current: BrightnessDisplay) -> [NotchMenuItem] {
@@ -327,7 +335,7 @@ private struct NotchBrightnessControls: View {
                 .frame(height: 24)
         } else {
             Text(FeatureStrings.brightness(l10n.language).noDisplays)
-                .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
         }
     }
@@ -360,7 +368,8 @@ private struct NotchKeyboardLightControls: View {
             service.setKeyboardLightEnabled(!enabled)
         } label: {
             Image(systemName: service.keyboardLightEnabled == false ? "light.min" : "light.max")
-                .font(.system(size: 12, weight: .medium))
+                .font(.callout.weight(.medium))
+                .symbolRenderingMode(.hierarchical)
                 .contentTransition(.symbolEffect(.replace))
                 .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: service.keyboardLightEnabled)
                 .frame(width: 18, height: 18)
@@ -380,7 +389,7 @@ private struct NotchKeyboardLightControls: View {
                 .frame(height: 24)
         } else {
             Text(FeatureStrings.notchEditor(l10n.language).keyboardLightUnavailable)
-                .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
         }
     }
@@ -407,6 +416,23 @@ enum NotchTileAccent {
         case .alert: return .white
         }
     }
+
+    /// The tint of the tile's lens while it is on. Only its active state
+    /// tints the glass.
+    var glassTint: Color {
+        switch self {
+        case .selection: return NotchGlassTint.selection
+        case .alert: return .red
+        case .awake: return .yellow
+        case .timer: return .orange
+        }
+    }
+
+    /// A neutral selection stays in the glass's own ink; a colour keeps the
+    /// glyph that reads on that colour.
+    var glassGlyph: AnyShapeStyle {
+        self == .selection ? AnyShapeStyle(.primary) : AnyShapeStyle(glyph)
+    }
 }
 
 /// A glyph in its own circle over a two-line label, the shape every shortcut
@@ -424,15 +450,26 @@ struct NotchActionTile: View {
     var active = false
     var accent: NotchTileAccent = .selection
     let action: () -> Void
+    @Environment(\.notchGlassSurface) private var glassSurface
+    @Environment(\.notchGlassTileID) private var tileID
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Black on the black island's white selection; on glass, the lens's ink.
+    private var glyphStyle: AnyShapeStyle {
+        guard active else { return AnyShapeStyle(.primary) }
+        return glassSurface ? accent.glassGlyph : AnyShapeStyle(accent.glyph)
+    }
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(active ? accent.glyph : .white.opacity(0.85))
+                Image(systemName: symbol).font(.title2.weight(.medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(glyphStyle)
                     .contentTransition(.symbolEffect(.replace))
                     .frame(width: 40, height: 40)
-                    .background(active ? accent.fill : Color.white.opacity(0.075), in: Circle())
+                    .notchGlass(Circle(), offGlass: 0.075, offGlassColor: active ? accent.fill : nil,
+                                tint: active ? accent.glassTint : nil, selected: active, id: tileID)
                     .animation(reduceMotion ? nil : .smooth(duration: 0.26), value: symbol)
                 label
                     .frame(maxWidth: .infinity)
@@ -444,7 +481,7 @@ struct NotchActionTile: View {
             .animation(reduceMotion ? nil : .smooth(duration: 0.26), value: active)
             .contentShape(RoundedRectangle(cornerRadius: 14))
         }
-        .buttonStyle(NotchButtonStyle(cornerRadius: 14))
+        .buttonStyle(NotchButtonStyle(cornerRadius: 14, lifts: !glassSurface))
         .accessibilityLabel(title)
         .accessibilityValue(reading ?? "")
         .accessibilityAddTraits(active ? .isSelected : [])
@@ -458,8 +495,8 @@ struct NotchActionTile: View {
                 // "dom, 10:45 p. m.", needs up to 91 pt on a 68 pt line. The
                 // smaller optical size spaces its letters wider, so scaling
                 // alone would still cut it off.
-                Text(reading).font(.system(size: 11, weight: .semibold)).monospacedDigit()
-                    .foregroundStyle(.white)
+                Text(reading).font(.subheadline.weight(.semibold)).monospacedDigit()
+                    .foregroundStyle(.primary)
                     .allowsTightening(true)
                     .minimumScaleFactor(0.7)
                     .modifier(NotchRollingDigits(value: reading, countsDown: readingCountsDown))
@@ -471,8 +508,8 @@ struct NotchActionTile: View {
             .lineLimit(1)
             .minimumScaleFactor(0.85)
         } else {
-            Text(title).font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white)
+            Text(title).font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
                 .lineLimit(2).multilineTextAlignment(.center)
                 .minimumScaleFactor(0.85)
                 .fixedSize(horizontal: false, vertical: true)
@@ -480,8 +517,8 @@ struct NotchActionTile: View {
     }
 
     private func readingTitle(_ text: String) -> some View {
-        Text(text).font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.white.opacity(0.7))
+        Text(text).font(.subheadline.weight(.medium))
+            .foregroundStyle(.secondary)
     }
 }
 
@@ -507,7 +544,7 @@ private struct NotchTimerTile: View {
         let active = session.hasSession
         return NotchActionTile(
             symbol: active ? symbol(session) : NotchControlItem.timer.symbol,
-            title: active ? FeatureStrings.notchActivities(l10n.language).phase(session.phase)
+            title: active ? NotchTimerSupport.title(for: session, text: FeatureStrings.notchActivities(l10n.language))
                 : NotchControlItem.timer.title(l10n),
             reading: active ? NotchTimerSupport.clockText(for: session, at: timer.now) : nil,
             readingCountsDown: !session.countsUp,

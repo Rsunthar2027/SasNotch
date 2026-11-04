@@ -61,7 +61,7 @@ struct NotchTimerStrip: View {
                 .contentShape(Rectangle())
             }
             .accessibilityLabel(companion.map { NotchCompanionMark.label($0, language: l10n.language) }
-                                ?? FeatureStrings.notchActivities(l10n.language).phase(timer.session.phase))
+                                ?? NotchTimerSupport.title(for: timer.session, text: FeatureStrings.notchActivities(l10n.language)))
             Color.clear.frame(width: geometry.compactActivityCameraGap)
             if timer.session.isRunning {
                 TimelineView(.periodic(from: Date(timeIntervalSinceNow: NotchTimerSupport.tickScheduleOffset(
@@ -102,7 +102,7 @@ struct NotchTimerStrip: View {
                    alignment: .trailing)
             .contentShape(Rectangle())
         }
-        .accessibilityLabel(FeatureStrings.notchActivities(l10n.language).phase(timer.session.phase))
+        .accessibilityLabel(NotchTimerSupport.title(for: timer.session, text: FeatureStrings.notchActivities(l10n.language)))
         .accessibilityValue(NotchTimerSupport.clockText(for: timer.session, at: now))
     }
 }
@@ -137,7 +137,7 @@ struct NotchCompanionMark: View {
         case .music:
             NotchMusicCover(artwork: music.artwork, side: geometry.compactMusicArtworkSide,
                             radius: geometry.compactMusicArtworkRadius, source: music.playback?.track)
-        case .timer, .keepAwake, .watch:
+        case .timer, .keepAwake:
             EmptyView()
         }
     }
@@ -175,7 +175,7 @@ struct NotchCompanionMark: View {
             return geometry.compactMusicArtworkInset
         case .calendar:
             return geometry.compactActivityEdgeInset(boxHeight: 9, radius: 0)
-        case .downloads, .timer, .keepAwake, .watch:
+        case .downloads, .timer, .keepAwake:
             let side = min(13, NotchTimerSupport.stripIconSize(height: geometry.compactActivityContentHeight))
             return geometry.compactActivityEdgeInset(boxHeight: side, radius: side / 2)
         }
@@ -196,7 +196,7 @@ struct NotchCompanionMark: View {
             let playback = NotchMusicService.shared.playback
             let title = playback?.track.title ?? FeatureStrings.radialMenu(language).mediaNowPlaying
             return [title, playback?.track.artist].compactMap { $0 }.joined(separator: ", ")
-        case .timer, .keepAwake, .watch:
+        case .timer, .keepAwake:
             return companion.title(language)
         }
     }

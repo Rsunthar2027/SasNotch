@@ -36,7 +36,7 @@ struct NotchCaptureControlsView: View {
             }
         }
         .padding(.top, layout.headerTop)
-        .foregroundStyle(.white)
+        .foregroundStyle(.primary)
         .onChange(of: focusedControl) {
             options.hasFocusedControl = focusedControl != nil
             service.scheduleCaptureControlsCollapse()
@@ -85,7 +85,7 @@ struct NotchCaptureControlsView: View {
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
                 .frame(height: 26)
-                .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+                .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
             }
             NotchIconButton(symbol: "chevron.up", title: FeatureStrings.notch(l10n.language).collapse,
                             action: service.collapseCaptureControls)

@@ -35,7 +35,7 @@ struct NotchQueueView: View {
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                                 if queue.canPlay {
                                     Button { service.playQueued(item) } label: {
-                                        Image(systemName: "play.fill").font(.system(size: 11))
+                                        Image(systemName: "play.fill").font(.subheadline)
                                             .frame(width: 28, height: 28).contentShape(Circle())
                                     }
                                     .buttonStyle(NotchButtonStyle(cornerRadius: 14))

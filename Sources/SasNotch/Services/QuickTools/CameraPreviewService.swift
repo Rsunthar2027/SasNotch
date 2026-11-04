@@ -26,6 +26,9 @@ final class CameraPreviewService: ObservableObject {
     private var captureGeneration = UUID()
     private var sessionRequest: CameraPreviewRequest?
     private var sessionObservers: [NSObjectProtocol] = []
+    /// The newest frame for a selfie, kept only by the island's session: the
+    /// floating mirror has no shutter, so it pays for no frames.
+    private var frameGrabber: MirrorFrameGrabber?
 
     /// The session is created on show and destroyed on hide. The view builds
     /// its preview layer from it while the panel is up.
@@ -198,7 +201,9 @@ final class CameraPreviewService: ObservableObject {
         selectedDeviceID = device.uniqueID
         let session = AVCaptureSession()
         let request = CameraPreviewRequest()
+        let grabber = isEmbeddedPresented ? MirrorFrameGrabber() : nil
         sessionRequest = request
+        frameGrabber = grabber
         self.session = session
         for name in [AVCaptureSession.runtimeErrorNotification, AVCaptureSession.wasInterruptedNotification] {
             sessionObservers.append(NotificationCenter.default.addObserver(forName: name, object: session,
@@ -216,7 +221,9 @@ final class CameraPreviewService: ObservableObject {
                session.canAddInput(input) {
                 session.addInput(input)
             }
+            grabber?.attach(to: session)
             session.commitConfiguration()
+            grabber?.unmirrorConnection()
             let hasInput = !session.inputs.isEmpty
             if hasInput, !request.isCancelled {
                 session.startRunning()
@@ -234,6 +241,7 @@ final class CameraPreviewService: ObservableObject {
         sessionObservers.forEach(NotificationCenter.default.removeObserver)
         sessionObservers.removeAll()
         sessionRequest?.cancel(); sessionRequest = nil
+        frameGrabber?.discardFrame(); frameGrabber = nil
         guard let session else { return }
         self.session = nil
         sessionQueue.async {
@@ -243,12 +251,48 @@ final class CameraPreviewService: ObservableObject {
             for input in session.inputs {
                 session.removeInput(input)
             }
+            for output in session.outputs {
+                session.removeOutput(output)
+            }
         }
     }
 
     func retryCapture() {
         guard isPresented, state == .unavailable else { return }
         beginCapture()
+    }
+
+    // MARK: - Selfie
+
+    /// What the island's shutter offers right now. Read with `state`, which
+    /// changes whenever the permission or the session does.
+    var selfieShutter: MirrorSelfieShutter {
+        let access: MirrorCameraAccess
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .notDetermined: access = .notDetermined
+        case .authorized: access = .authorized
+        case .restricted: access = .restricted
+        case .denied: access = .denied
+        @unknown default: access = .denied
+        }
+        return MirrorSelfieShutter.resolve(access: access, cameraMissing: state == .noCamera,
+                                           running: state == .running && session != nil)
+    }
+
+    /// The shutter in the island's top row. Never asked, it asks for the
+    /// camera; running, it takes the selfie; otherwise it does nothing.
+    func takeSelfie() {
+        guard isEmbeddedPresented else { return }
+        switch selfieShutter {
+        case .ready:
+            MirrorSelfieService.shared.capture(from: frameGrabber)
+        case .requestAccess:
+            // A question already on screen keeps its answer's callback; a
+            // second request would leave the first one to be ignored.
+            if state != .waitingPermission { beginCapture() }
+        case .denied, .noCamera, .notRunning:
+            break
+        }
     }
 
     func selectCamera(_ device: AVCaptureDevice) {
@@ -266,6 +310,7 @@ final class CameraPreviewService: ObservableObject {
             AVCaptureDevice.userPreferredCamera = device
         }
         guard let session, let request = sessionRequest else { return }
+        let grabber = frameGrabber
         sessionQueue.async { [weak self] in
             guard !request.isCancelled else { return }
             session.beginConfiguration()
@@ -277,6 +322,9 @@ final class CameraPreviewService: ObservableObject {
                 session.addInput(input)
             }
             session.commitConfiguration()
+            // A selfie right after switching must not be the last camera's frame.
+            grabber?.unmirrorConnection()
+            grabber?.discardFrame()
             let hasInput = !session.inputs.isEmpty
             let isRunning = hasInput && session.isRunning
             DispatchQueue.main.async {

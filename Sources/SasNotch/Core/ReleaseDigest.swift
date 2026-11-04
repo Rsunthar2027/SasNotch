@@ -195,7 +195,8 @@ enum WhatsNewInfo {
 
     /// Every feature that existed when this window began telling new features
     /// apart. Frozen on purpose: a feature added later is new to anyone who
-    /// updates from a version that never recorded what it knew.
+    /// updates from a version that never recorded what it knew. A feature
+    /// that later left the app leaves the list with it.
     static let featuresBeforeTracking: Set<String> = [
         "switcher", "dockPreview", "dockClick", "windowMaximizer", "windowLayout", "autoQuit", "spacesOrder",
         "scrollInverter", "scrollHorizontal", "focusFollowsMouse", "smoothScroll", "linearScroll",
@@ -209,7 +210,7 @@ enum WhatsNewInfo {
         "cleaner", "uninstaller", "homebrew", "appUpdates", "screenshot", "cameraPreview", "radialMenu",
         "scratchpad", "commandBar", "screenRecorder", "wallpaper", "killProcess", "portManager",
         "notch", "notchCalendar", "notchNotifications", "notchGestures", "notchTimer", "notchAccessories",
-        "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents", "notchWatch",
+        "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents",
         "notchMascot",
         "monitorCPU", "monitorGPU", "monitorMemory", "monitorNetwork", "monitorDisk", "monitorPower",
         "connectedDevices", "fanControl",

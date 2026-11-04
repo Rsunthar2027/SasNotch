@@ -15,7 +15,8 @@ struct NotchLevelSlider: NSViewRepresentable {
     @Binding var value: Double
     let label: String
     var range: ClosedRange<Double> = 0...1
-    var tint: Color = .white
+    /// The fill's own colour; by default the island's ink.
+    var tint: Color? = nil
     var vertical = false
     /// A slimmer drawing can retain the native control's full hit area.
     var trackThickness: CGFloat?
@@ -64,7 +65,15 @@ struct NotchLevelSlider: NSViewRepresentable {
         if slider.minValue != lower { slider.minValue = lower }
         if slider.maxValue != upper { slider.maxValue = upper }
         if slider.isVertical != vertical { slider.isVertical = vertical }
-        (slider.cell as? NotchLevelCell)?.fill = NSColor(tint)
+        // AppKit draws this bar, outside SwiftUI's styles, so it takes the
+        // ink from the scheme: white on black, frosted and dark glass, black
+        // on light glass.
+        let ink: NSColor = context.environment.colorScheme == .dark ? .white : .black
+        if let cell = slider.cell as? NotchLevelCell, cell.ink != ink {
+            cell.ink = ink
+            slider.needsDisplay = true
+        }
+        (slider.cell as? NotchLevelCell)?.fill = tint.map { NSColor($0) } ?? ink
         (slider.cell as? NotchLevelCell)?.marker = marker
         (slider.cell as? NotchLevelCell)?.trackThickness = trackThickness
         let bounded = value.isFinite ? min(upper, max(lower, value)) : lower
@@ -135,6 +144,7 @@ struct NotchLevelSlider: NSViewRepresentable {
 
 private final class NotchLevelCell: NSSliderCell {
     var fill: NSColor = .white
+    var ink: NSColor = .white
     var marker: Double?
     var trackThickness: CGFloat?
     var trackingChanged: ((Bool) -> Void)?
@@ -180,7 +190,7 @@ private final class NotchLevelCell: NSSliderCell {
         let outline = NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius)
         NSGraphicsContext.saveGraphicsState()
         outline.addClip()
-        NSColor.white.withAlphaComponent(0.14).setFill()
+        ink.withAlphaComponent(0.14).setFill()
         track.fill()
         let span = maxValue - minValue
         let fraction = span > 0 ? min(1, max(0, ((drawnValue ?? doubleValue) - minValue) / span)) : 0
@@ -193,7 +203,7 @@ private final class NotchLevelCell: NSSliderCell {
         }
         if let marker, span > 0, marker > minValue, marker < maxValue {
             let position = (marker - minValue) / span
-            NSColor.white.withAlphaComponent(0.45).setFill()
+            ink.withAlphaComponent(0.45).setFill()
             if isFader {
                 let y = flipped ? track.maxY - track.height * position : track.minY + track.height * position
                 NSRect(x: track.minX, y: y - 0.5, width: track.width, height: 1).fill()

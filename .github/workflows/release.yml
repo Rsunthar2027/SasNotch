@@ -113,3 +113,13 @@ jobs:
             --title "SasNotch $VERSION" \
             --notes-file "$NOTES_FILE" \
             --verify-tag
+
+      - name: Rebuild the website's notes
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [[ -z "$HOOK" ]]; then
+            echo "::notice::VERCEL_DEPLOY_HOOK isn't set, so the website wasn't rebuilt."
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 30 -X POST "$HOOK" > /dev/null || echo "::warning::The website's deploy hook failed; the release itself is fine."

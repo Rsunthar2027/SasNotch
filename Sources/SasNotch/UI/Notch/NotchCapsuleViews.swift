@@ -353,7 +353,7 @@ struct NotchCapsuleTimerStrip: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(FeatureStrings.notchActivities(l10n.language).phase(timer.session.phase))
+        .accessibilityLabel(NotchTimerSupport.title(for: timer.session, text: FeatureStrings.notchActivities(l10n.language)))
         .accessibilityValue(NotchTimerSupport.clockText(for: timer.session, at: timer.now))
         .accessibilityHint(FeatureStrings.notch(l10n.language).open)
     }
@@ -430,7 +430,7 @@ private struct NotchCapsuleCompanionMark: View {
                     NotchCapsuleCalendarStrip.clockMark(countdown, now: context.date)
                 }
             }
-        case .timer, .keepAwake, .watch:
+        case .timer, .keepAwake:
             EmptyView()
         }
     }
@@ -523,44 +523,6 @@ struct NotchCapsuleDownloadStrip: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(name)
         .accessibilityValue(item?.fraction.map { $0.formatted(.percent.precision(.fractionLength(0))) } ?? "")
-        .accessibilityHint(FeatureStrings.notch(l10n.language).open)
-    }
-}
-
-/// A watched area: the eye, then what the area reads now, or the area
-/// itself when it holds no text.
-struct NotchCapsuleWatchStrip: View {
-    @ObservedObject var service: NotchService
-    let size: CGSize
-    /// Another display's capsule, when the island shows on every display.
-    var displayGeometry: NotchGeometry? = nil
-    @ObservedObject private var watch = NotchWatchService.shared
-    @ObservedObject private var l10n = L10n.shared
-
-    var body: some View {
-        let geometry = displayGeometry ?? service.geometry
-        NotchCapsuleRow(size: size, geometry: geometry) {
-            HStack(spacing: CapsuleLayout.spacing) {
-                NotchWatchEye(size: CapsuleLayout.symbolSize, hidden: watch.state == .hidden)
-                    .frame(width: CapsuleLayout.symbolWidth)
-                if watch.showsThumbnail, let preview = watch.preview {
-                    NotchWatchThumbnail(image: preview, height: max(8, geometry.stripBodyHeight - 6))
-                } else if watch.headline.isEmpty {
-                    // A hidden window's slashed eye says enough until it is read.
-                    if watch.state == .hidden {
-                        Color.clear.frame(width: CapsuleLayout.spinnerWidth, height: 1)
-                    } else {
-                        ProgressView().controlSize(.mini).frame(width: CapsuleLayout.spinnerWidth)
-                    }
-                } else {
-                    Text(watch.headline).font(Font(CapsuleLayout.levelFont as CTFont))
-                        .lineLimit(1).truncationMode(.tail)
-                }
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(FeatureStrings.notchWatch(l10n.language).title)
-        .accessibilityValue(watch.headline)
         .accessibilityHint(FeatureStrings.notch(l10n.language).open)
     }
 }

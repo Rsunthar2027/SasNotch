@@ -92,6 +92,8 @@ struct NotchTimerSession: Equatable {
     private(set) var completed = false
     private(set) var completedFocuses = 0
     private(set) var configuration = NotchPomodoroConfiguration()
+    /// A preset's name, which a countdown shows in place of its phase.
+    private(set) var label: String?
 
     var countsUp: Bool { mode == .stopwatch }
     var isRunning: Bool { anchor != nil }
@@ -111,10 +113,14 @@ struct NotchTimerSession: Equatable {
     }
 
     mutating func start(mode: NotchTimerMode, minutes: Int, now: TimeInterval,
-                        configuration: NotchPomodoroConfiguration = NotchPomodoroConfiguration()) {
+                        configuration: NotchPomodoroConfiguration = NotchPomodoroConfiguration(),
+                        label: String? = nil) {
         guard !hasSession, now.isFinite else { return }
         self.mode = mode
         self.configuration = configuration
+        // Only a plain countdown takes a name; a blank one is no name.
+        let name = label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.label = mode == .timer && !name.isEmpty ? name : nil
         completedFocuses = 0
         switch mode {
         case .timer:
@@ -179,6 +185,11 @@ enum NotchTimerSupport {
     static func showsActivity(_ session: NotchTimerSession, in defaults: UserDefaults = .standard) -> Bool {
         session.hasSession && isEnabled(in: defaults)
             && (session.completed || !defaults.bool(forKey: DefaultsKey.notchHideTimerCountdown))
+    }
+
+    /// What names a session wherever it shows: a preset's name, else its phase.
+    static func title(for session: NotchTimerSession, text: NotchActivityStrings) -> String {
+        session.label ?? text.phase(session.phase)
     }
 
     static func isSoundEnabled(in defaults: UserDefaults = .standard) -> Bool {

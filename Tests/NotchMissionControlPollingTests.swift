@@ -14,7 +14,9 @@ enum NotchMissionControlPollingTests {
     enum NotchFrameProbe {
         static var visible = false
         static var reads = 0
+        static var sinceInput: TimeInterval = 0
         static func overviewIsVisible(on screen: CGRect) -> Bool { reads += 1; return visible }
+        static func secondsSinceInput() -> TimeInterval { sinceInput }
     }
     class State {
         final class Panel { var isVisible = true }
@@ -35,6 +37,7 @@ enum NotchMissionControlPollingTests {
         ProcessInfo.processInfo.systemUptime = 100
         NotchFrameProbe.visible = false
         NotchFrameProbe.reads = 0
+        NotchFrameProbe.sinceInput = 0
         let host = Host()
         defer { host.missionControlTimer?.invalidate() }
         host.syncMissionControlMonitoring()
@@ -73,5 +76,51 @@ enum NotchMissionControlPollingTests {
         host.syncMissionControlMonitoring()
         suite.expect(host.missionControlTimer == nil && !restoredTimer.isValid,
                      "an ordinary hidden island stops polling completely")
+        runQuietCadence(suite)
+    }
+
+    /// With no input the window list is read once a second, at the same timer
+    /// pace, and the first tick after input goes back to reading every time.
+    private static func runQuietCadence(_ suite: TestSuite) {
+        suite.expect(NotchOverviewCadence.readIsDue(sinceLastRead: 0.25, sinceInput: 2.9)
+                        && !NotchOverviewCadence.readIsDue(sinceLastRead: 0.25, sinceInput: 3)
+                        && NotchOverviewCadence.readIsDue(sinceLastRead: 1, sinceInput: 60)
+                        && !NotchOverviewCadence.readIsDue(sinceLastRead: 0.99, sinceInput: 60),
+                     "reads are due just after input, and otherwise once a second")
+        ProcessInfo.processInfo.systemUptime = 200
+        NotchFrameProbe.visible = false
+        NotchFrameProbe.sinceInput = 60
+        let host = Host()
+        defer { host.missionControlTimer?.invalidate() }
+        host.syncMissionControlMonitoring()
+        let timer = host.missionControlTimer
+        NotchFrameProbe.reads = 0
+        func tick(_ count: Int) {
+            for _ in 0..<count {
+                ProcessInfo.processInfo.systemUptime += 0.25
+                host.refreshMissionControlState()
+            }
+        }
+        tick(8)
+        suite.expect(NotchFrameProbe.reads == 2 && host.missionControlTimer === timer
+                        && host.missionControlTimer?.timeInterval == 0.25,
+                     "a quiet resting island reads once a second on the same timer")
+        NotchFrameProbe.reads = 0
+        NotchFrameProbe.sinceInput = 0.1
+        tick(4)
+        suite.expect(NotchFrameProbe.reads == 4, "input returns reads to every tick at the very next tick")
+        NotchFrameProbe.sinceInput = 60
+        tick(4)
+        NotchFrameProbe.reads = 0
+        host.refreshMissionControlState(now: true)
+        suite.expect(NotchFrameProbe.reads == 1, "an immediate check before a reveal ignores the quiet cadence")
+        NotchFrameProbe.visible = true
+        host.refreshMissionControlState(now: true)
+        NotchFrameProbe.reads = 0
+        for _ in 0..<4 {
+            ProcessInfo.processInfo.systemUptime += 0.1
+            host.refreshMissionControlState()
+        }
+        suite.expect(NotchFrameProbe.reads == 4, "an open overview is followed at full rate without any input")
     }
 }

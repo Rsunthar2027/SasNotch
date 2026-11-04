@@ -14,8 +14,8 @@ import Foundation
 ///    They look like an alias but mean something else, and never count as
 ///    island context.
 /// 2. Aliases match whole words. A plain alias ignores letter case; `.exact`
-///    must match its capitalization ("Watch" the feature, not "watch" the
-///    verb). Longer aliases go first and claim their words, so "Dock
+///    must match its capitalization ("Media" the feature, not "media" the
+///    word). Longer aliases go first and claim their words, so "Dock
 ///    previews" is never also read as a shorter alias inside it.
 /// 3. `.island` aliases count only in an island context: the section title
 ///    or the bullet says island, islands, notch, camera cutout or beside the
@@ -158,8 +158,8 @@ enum ReleaseChangeAliases {
             "downloads folder", "downloads page", "completed download", "completed downloads"]
         case .notchAgents: return ["ai agents", "ai agent", "claude code", "claude code timer", "codex", "ai usage",
             "opencode", "github copilot", .island("agent"), .island("agents")]
-        case .notchWatch: return [.exact("Watch")]
         case .notchMascot: return ["companion"]
+        case .notchTerminal: return [.island("terminal"), "terminal tab", "terminal page"]
         case .monitorCPU: return ["cpu temperature", "cpu load", "cpu readings", "per core", "per-core",
             "processor temperature", "process breakdowns", "cpu alert", "cpu and gpu temperatures"]
         case .monitorGPU: return ["gpu usage", "gpu load", "gpu temperature", "gpu temperatures",

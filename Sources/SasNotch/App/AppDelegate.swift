@@ -217,6 +217,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             #if SASNOTCH_DEVELOPMENT
+            // `--preview-island [module]`: opens the island on that page and pins
+            // it, so its surface can be looked at without a pointer on the notch.
+            if let flag = CommandLine.arguments.firstIndex(of: "--preview-island") {
+                let page = CommandLine.arguments.dropFirst(flag + 1).first.flatMap(NotchModule.init(rawValue:))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    NotchService.shared.open(page, pinned: true, takeFocus: false, feedback: false)
+                }
+            }
             if CommandLine.arguments.contains("--preview-notch-tour") {
                 self.showUpdateHighlights(isReview: true)
                 return
@@ -309,6 +317,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     func applicationWillTerminate(_ notification: Notification) {
         isTerminating = true
         CommandBarService.shared.restoreBorrowedInputSource()
+        // A command still running in the island's terminal ends with the app.
+        NotchTerminalService.shared.terminateForQuit()
         if AppFeature.notch.isAvailable { NotchService.shared.stop(restoreCapture: false) }
         // Quitting properly means the start worked, whenever it happened.
         endStartupWatch()
@@ -2212,9 +2222,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     /// retain their own release gates.
     /// SasNotch shows What's New from its own changelog after an update. The
     /// upstream tours, showcase videos and support invitations described
-    /// another app's releases, so they are not presented.
+    /// another app's releases, so they are not presented. The one-time offer
+    /// of the simpler default setup waits until What's New has closed.
     private func presentUpdateIntros() {
-        _ = showWhatsNewIfNeeded()
+        guard !showWhatsNewIfNeeded() else { return }
+        showSimpleSetupOfferIfNeeded()
+    }
+
+    /// Asks someone who set SasNotch up before the simpler default setup,
+    /// once, whether to switch to it, and tells them about the move to Liquid
+    /// Glass in the same sheet. New installs start from both and are marked
+    /// answered during setup; a Mac whose installs already match counts as
+    /// answered without being asked. Each is recorded as asked before it
+    /// shows, so a quit or crash while it is up never asks again. It waits a
+    /// moment for launch to settle.
+    private func showSimpleSetupOfferIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard !isTerminating, defaults.bool(forKey: DefaultsKey.hasOnboarded) else { return }
+        let glass = LiquidGlassMigration.takePendingPrompt(in: defaults)
+        var offersSetup = false
+        if !defaults.bool(forKey: DefaultsKey.simpleSetupOfferAnswered) {
+            defaults.set(true, forKey: DefaultsKey.simpleSetupOfferAnswered)
+            offersSetup = !FeaturePreset.isRecommendedSetup(isAvailable: \.isAvailable)
+        }
+        let alerts = StartupPromptAlert.plan(offersSetup: offersSetup, glass: glass)
+        guard !alerts.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, !self.isTerminating else { return }
+            self.closePopover()
+            NSApp.activate(ignoringOtherApps: true)
+            for plan in alerts {
+                let alert = NSAlert()
+                alert.alertStyle = .informational
+                alert.messageText = plan.title
+                alert.informativeText = plan.message
+                alert.addButton(withTitle: plan.confirm)
+                if let decline = plan.decline { alert.addButton(withTitle: decline) }
+                guard alert.runModal() == .alertFirstButtonReturn else { continue }
+                switch plan.answer {
+                case .switchSetup: FeatureRuntime.shared.applyRecommendedSetup()
+                case .useGlass: AppAppearanceController.shared.notchLiquidGlassEnabled = true
+                case nil: break
+                }
+            }
+        }
     }
 
     private func brightnessSetupNeeded() -> Bool {
@@ -2798,6 +2849,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         UserDefaults.standard.set(AppInfo.version, forKey: DefaultsKey.lastUpdateIntroVersion)
         UserDefaults.standard.set(BrightnessUpdatePromptInfo.handled,
                                   forKey: DefaultsKey.brightnessUpdatePromptState)
+        // Setup just installed the recommended features; never offer them.
+        UserDefaults.standard.set(true, forKey: DefaultsKey.simpleSetupOfferAnswered)
         markSupportUpdateIntroSeenIfCurrentUpdate()
         markUpdateShowcaseIntroSeenIfCurrentUpdate()
         // A clean install that just saw everything in onboarding should not

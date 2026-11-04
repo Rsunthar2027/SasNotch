@@ -1066,15 +1066,14 @@ enum NotchPresentationProbe {
             if bubbles.quickAccessProbeTrackingAreas != 1 {
                 failures.append("floating controls did not create exactly one hover corridor")
             }
-            // Glass shades the circles like the island at the same height, and
-            // like its lip below it. Sampled under the glyph.
+            // The circles are solid black, or lenses of real glass whose look
+            // is the compositor's: offscreen, only that they draw can be read.
+            // Sampled under the glyph.
             for point in bubbles.quickAccessProbeCenters {
                 let sample = CGPoint(x: point.x, y: point.y - 15)
-                let depth = min(1, (bubbles.panel.frame.maxY - sample.y) / geometry.expanded.height)
-                let expected = quickAccessGlass ? 1 - 0.45 * pow(depth, 2.5) : 1
                 let opacity = bubbles.quickAccessProbeOpacity(at: sample) ?? 0
-                if abs(opacity - expected) > 0.04 {
-                    failures.append("a floating control on the \(side) side drew opacity \(opacity), expected \(expected)")
+                if quickAccessGlass ? opacity <= 0 : abs(opacity - 1) > 0.04 {
+                    failures.append("a floating control on the \(side) side drew opacity \(opacity)")
                 }
             }
             if quickAccessGlass && !reduceMotion {

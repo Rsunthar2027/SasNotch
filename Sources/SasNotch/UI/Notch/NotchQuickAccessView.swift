@@ -72,6 +72,8 @@ struct NotchQuickAccessView: View {
     @ObservedObject private var recorder = ScreenRecorderService.shared
     @State private var choosingAwake = false
     @AppStorage(DefaultsKey.notchLiquidGlassEnabled) private var glass = true
+    @AppStorage(DefaultsKey.notchGlassStyle) private var glassStyle = NotchGlassStyle.fallback.rawValue
+    @ObservedObject private var appearance = NotchSystemAppearance.shared
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -96,15 +98,17 @@ struct NotchQuickAccessView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         Group {
             if followsGlass {
-                buttons.modifier(NotchQuickAccessGlassSurface(presentation: backdrop, drops: drops))
+                buttons.modifier(NotchQuickAccessGlassSurface(presentation: backdrop, drops: drops,
+                                                              style: NotchGlassStyle.sanitized(glassStyle)))
             } else {
                 buttons.background { drops }
             }
         }
-        .environment(\.colorScheme, .dark)
+        // On glass the circles take the island's appearance, as its content does.
+        .environment(\.colorScheme, followsGlass ? appearance.scheme : .dark)
         .environment(\.notchPresentation, true)
-        .foregroundStyle(.white)
-        .tint(.white)
+        .foregroundStyle(followsGlass ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.white))
+        .tint(followsGlass ? Color.primary : .white)
         .allowsHitTesting(motion.interactive)
         .accessibilityHidden(!motion.interactive)
     }
@@ -144,7 +148,8 @@ struct NotchQuickAccessView: View {
             if picksDuration { choosingAwake = true } else { service.activateQuickAction(action) }
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: 17, weight: .medium))
+                .font(.title2.weight(.medium))
+                .symbolRenderingMode(.hierarchical)
                 .frame(width: NotchQuickAccessLayout.diameter, height: NotchQuickAccessLayout.diameter)
                 // In glass the drop beneath carries the island's shade, which
                 // the window server does not count as the window's own pixels:
@@ -152,7 +157,7 @@ struct NotchQuickAccessView: View {
                 // the app behind, not just the glyph.
                 .background(followsGlass ? Color.black.opacity(0.02) : Color.black, in: Circle())
                 .overlay {
-                    Circle().strokeBorder(.white.opacity(selected || contrast == .increased ? 0.6 : 0.16), lineWidth: 0.75)
+                    Circle().strokeBorder(.primary.opacity(selected || contrast == .increased ? 0.6 : 0.16), lineWidth: 0.75)
                         .allowsHitTesting(false)
                 }
                 .contentShape(Circle())
@@ -185,34 +190,64 @@ private struct NotchQuickAccessDrops: View {
     }
 }
 
-/// On glass each drop takes the island's shade at its own height, so it
-/// leaves the island without a seam and buttons below the island are as
-/// translucent as its lip. The island no longer hides what lies beneath its
-/// edge, so a drop still inside it is cut away.
+/// On glass each drop is a lens of the island's own Liquid Glass, so it
+/// leaves the island as part of it. While the island opens or closes it
+/// keeps the island's resting black. The island no longer hides what lies
+/// beneath its edge, so a drop still inside it is cut away.
 private struct NotchQuickAccessGlassSurface: ViewModifier {
     @ObservedObject var presentation: NotchBackdropPresentation
     let drops: NotchQuickAccessDrops
+    let style: NotchGlassStyle
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
+    /// The same dimming a tile takes, so a glyph reads over a white window.
+    private var dropTint: Color {
+        (scheme == .dark ? Color.black : .white)
+            .opacity(NotchGlassContrast.tileTintOpacity(increasedContrast: contrast == .increased, style: style))
+    }
 
     func body(content: Content) -> some View {
         let island = presentation.usesGlass ? presentation.contour : Path()
         content
             .background {
                 if presentation.usesGlass {
-                    GeometryReader { proxy in
-                        // Past the island the shade keeps the lip's tone,
-                        // measured from the top edge as the island's own.
-                        LinearGradient(stops: NotchSurfaceBackground.shade(openness: presentation.openness, contrast: contrast),
-                                       startPoint: .top,
-                                       endPoint: UnitPoint(x: 0.5, y: (island.isEmpty ? 0 : island.boundingRect.maxY)
-                                                            / max(1, proxy.size.height)))
-                            .mask { drops }
-                    }
+                    lenses
                 } else {
                     drops
                 }
             }
             .clipShape(NotchQuickAccessOutside(island: island), style: FillStyle(eoFill: true))
+    }
+
+    @ViewBuilder private var lenses: some View {
+#if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            Color.clear
+                .glassEffect(style.glass.tint(dropTint), in: NotchQuickAccessDropsShape(placements: drops.placements,
+                                                                          progress: drops.progress))
+                .overlay { Color.black.opacity(presentation.restingBlack).mask { drops } }
+                .allowsHitTesting(false)
+        } else {
+            drops
+        }
+#else
+        drops
+#endif
+    }
+}
+
+/// Every drop as one outline, for the glass that draws them together.
+private struct NotchQuickAccessDropsShape: Shape {
+    let placements: [NotchQuickAccessPlacement]
+    let progress: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for placement in placements {
+            path.addPath(NotchQuickAccessDrop(progress: progress, index: placement.index, edge: placement.edge,
+                                              top: placement.top, side: placement.side).path(in: rect))
+        }
+        return path
     }
 }
 

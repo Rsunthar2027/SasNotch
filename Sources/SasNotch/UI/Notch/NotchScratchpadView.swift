@@ -13,6 +13,7 @@ import SwiftUI
 /// their own cross, Command-T and Command-W work, a new or chosen pad puts
 /// the caret in its text, and a cleared pad comes back with one undo.
 struct NotchScratchpadView: View {
+    @Environment(\.colorScheme) private var scheme
     @ObservedObject var service: NotchService
     @ObservedObject private var pad = ScratchpadService.shared
     @ObservedObject private var l10n = L10n.shared
@@ -47,20 +48,20 @@ struct NotchScratchpadView: View {
                     }
                     if pad.saveFailed {
                         Label(text.saveFailed, systemImage: "exclamationmark.triangle")
-                            .font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.6))
+                            .font(.system(size: 10.5)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     ZStack(alignment: .topLeading) {
                         PlainTextEditor(text: $pad.text, fontSize: textSize,
-                                        textColor: .white,
+                                        textColor: scheme == .dark ? .white : .black,
                                         textContainerInset: Self.editorInset,
                                         usesFindBar: true,
                                         completesTaskBoxes: true,
                                         continuesLists: true,
                                         onCommandReturn: { pad.togglePreview() },
                                         isActive: !pad.isPreviewing) { view in
-                            view.insertionPointColor = .white
+                            view.insertionPointColor = scheme == .dark ? .white : .black
                             editor.view = view
                             DispatchQueue.main.async { focusEditor() }
                         }
@@ -75,7 +76,7 @@ struct NotchScratchpadView: View {
                         } else if pad.text.isEmpty {
                             Text(text.placeholder)
                                 .font(.system(size: textSize))
-                                .foregroundStyle(.white.opacity(0.35))
+                                .foregroundStyle(.tertiary)
                                 .padding(.leading, Self.editorInset.width + PlainTextEditor.lineFragmentPadding)
                                 .padding(.top, Self.editorInset.height)
                                 .allowsHitTesting(false)
@@ -135,8 +136,11 @@ struct NotchScratchpadView: View {
     private var tabStrip: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
-                HStack(spacing: 4) {
-                    ForEach(pad.pads) { entry in tab(entry).id(entry.id) }
+                // The tabs' lenses share one container and flow as they change.
+                NotchGlassGroup(spacing: 4) {
+                    HStack(spacing: 4) {
+                        ForEach(pad.pads) { entry in tab(entry).id(entry.id) }
+                    }
                 }
             }
             .scrollIndicators(.hidden)
@@ -266,7 +270,7 @@ struct NotchScratchpadView: View {
         let showsClose = !selected && pad.canClosePad && hoveredPadID == entry.id
         return HStack(spacing: 4) {
             Text(entry.name)
-                .font(.system(size: 11, weight: .medium))
+                .font(.subheadline.weight(.medium))
                 .lineLimit(1)
             if selected {
                 Image(systemName: "chevron.down")
@@ -275,7 +279,7 @@ struct NotchScratchpadView: View {
                 Button { requestClose(entry) } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(.secondary)
                         .frame(width: 14, height: 14)
                         .contentShape(Rectangle())
                 }
@@ -284,11 +288,12 @@ struct NotchScratchpadView: View {
                 .accessibilityLabel(text.closePad)
             }
         }
-        .foregroundStyle(selected ? .white : .white.opacity(0.6))
+        .foregroundStyle(selected ? .primary : .secondary)
         .padding(.leading, 10)
         .padding(.trailing, showsClose ? 5 : selected ? 8 : 10)
         .frame(height: 22)
-        .background(.white.opacity(selected ? 0.14 : 0.05), in: Capsule())
+        .notchGlass(Capsule(), offGlass: selected ? 0.14 : 0.05, tint: selected ? NotchGlassTint.selection : nil,
+                    selected: selected, id: "notch.pad.\(entry.id)")
         .contentShape(Capsule())
     }
 

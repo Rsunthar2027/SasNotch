@@ -556,7 +556,7 @@ struct QuickLauncherView: View {
     }
 
     private func iconBackground(_ item: QuickLauncherItem, isSelected: Bool, isHovered: Bool) -> Color {
-        if notchSize != nil { return .white.opacity(isSelected || isHovered ? 0.14 : 0.065) }
+        if notchSize != nil { return Color.primary.opacity(isSelected || isHovered ? 0.14 : 0.065) }
         if isActive(item) { return Color.accentColor.opacity(0.18) }
         if isSelected || isHovered { return Color.primary.opacity(0.1) }
         return Color.primary.opacity(0.07)

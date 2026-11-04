@@ -84,6 +84,7 @@ struct MetricsTests {
             }),
             ("repository", { RepositoryFeatureTests.run(suite) }),
             ("live-activities", { LiveActivityTests.run(suite) }),
+            ("charge-limit", { ChargeLimitTests.run(suite) }),
             ("screenshots", {
                 ScreenshotClipboardTests.run(suite)
                 ScreenshotAutoCopyTests.run(suite)
@@ -125,8 +126,14 @@ struct MetricsTests {
                 NotchSettingsTabRowTests.run(suite)
                 NotchPresentationProbeArgumentTests.run(suite)
             }),
+            ("timer-presets", { NotchTimerPresetTests.run(suite) }),
+            ("terminal", { NotchTerminalTests.run(suite) }),
             ("switcher-model", { SwitcherModelFeatureTests.run(suite) }),
             ("agents", { NotchAgentTests.run(suite) }),
+            ("mirror-selfie", { MirrorSelfieTests.run(suite) }),
+            ("notch-glass", { NotchGlassTests.run(suite) }),
+            ("glass-migration", { LiquidGlassMigrationTests.run(suite) }),
+            ("app-icon", { AppIconBundleTests.run(suite) }),
             ("features", {
                 FeatureCatalogTests.run(suite)
                 MenuPanelSectionGateContract.run(suite)

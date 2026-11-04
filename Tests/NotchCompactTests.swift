@@ -30,6 +30,11 @@ enum NotchCompactTests {
                 .onAppear { CameraPreviewService.shared.previewMenu = showsCameraMenu }
         }
     }
+    /// The selfie's flash and confirmation over the preview; nothing to show here.
+    struct NotchMirrorSelfieFeedback: View {
+        let size: CGSize
+        var body: some View { EmptyView() }
+    }
     final class NotchService: ObservableObject {
         var presentationWindow: NSWindow?
         @Published var scratchpadCloseSerial = 0

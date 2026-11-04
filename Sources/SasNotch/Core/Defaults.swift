@@ -12,6 +12,7 @@ enum DefaultsKey {
     static let appearance = "appAppearance"               // AppAppearance.rawValue
     static let liquidGlassEnabled = "liquidGlassEnabled"  // Liquid Glass in windows and panels on macOS 26+
     static let notchLiquidGlassEnabled = "notchLiquidGlassEnabled" // Dynamic Island glass, independently controlled
+    static let notchGlassStyle = "notchGlassStyle" // Light, Regular or Extra clear Liquid Glass for the open island
     static let clamshellPreferred = "clamshellPreferred"  // apply closed-lid mode to every session
     static let dimScreenOnLidClose = "dimScreenOnLidClose" // dim the built-in display to zero while the lid is closed
     static let onboardingStep = "onboardingStep"          // resume point if onboarding is interrupted
@@ -20,6 +21,13 @@ enum DefaultsKey {
     static let supportUpdateIntroVersion = "supportUpdateIntroVersion"
     static let updateHighlightsSeenVersion = "updateHighlightsSeenVersion"
     static let featureHubKeptFeatures = "featureHubKeptFeatures" // comma-joined AppFeature raw values
+    static let featureHubAdvancedExpanded = "featureHubAdvancedExpanded" // the Features page's Advanced section is open
+    // Asked once, after an update, whether to switch to the simpler default
+    // setup. New installs start from it and are marked answered.
+    static let simpleSetupOfferAnswered = "simpleSetupOfferAnswered"
+    static let liquidGlassMigrationHandled = "liquidGlassMigrationHandled"
+    static let liquidGlassSeenBeforeSupport = "liquidGlassSeenBeforeSupport"
+    static let liquidGlassPendingPrompt = "liquidGlassPendingPrompt"
     static let brightnessUpdatePromptState = "brightnessUpdatePromptState"
     static let updateShowcaseIntroVersion = "updateShowcaseIntroVersion"
     static let updateShowcaseMediaOverride = "updateShowcaseMediaOverride"
@@ -597,6 +605,8 @@ enum DefaultsKey {
     static let micMuteShortcut = "micMuteShortcut"
     static let cameraPreviewShortcutEnabled = "cameraPreviewShortcutEnabled"
     static let cameraPreviewShortcut = "cameraPreviewShortcut"
+    // Mirror selfie
+    static let notchSelfieSavesToDownloads = "notchSelfieSavesToDownloads" // the island's shutter also keeps a PNG in ~/Downloads
     static let wallpaperApplyAllDisplays = "wallpaperApplyAllDisplays"
     static let wallpaperFilter = "wallpaperFilter"
     static let wallpaperOwnBookmarks = "wallpaperOwnBookmarks"
@@ -856,6 +866,9 @@ enum DefaultsKey {
     static let notchPomodoroLongBreakMinutes = "notchPomodoroLongBreakMinutes"
     static let notchPomodoroLongBreakInterval = "notchPomodoroLongBreakInterval"
     static let notchPomodoroTotalSessions = "notchPomodoroTotalSessions"
+    // Timer presets: the user's own named countdowns, as JSON. The built-in
+    // ones live in code and are never stored.
+    static let notchTimerPresets = "notchTimerPresets"
     static let notchCameraEnabled = "notchCameraEnabled"
     static let notchAccessoriesEnabled = "notchAccessoriesEnabled"
     static let notchLyricsEnabled = "notchLyricsEnabled"
@@ -865,10 +878,6 @@ enum DefaultsKey {
     static let notchQueueEnabled = "notchQueueEnabled"
     static let notchDownloadsEnabled = "notchDownloadsEnabled"
     static let notchDownloadsFolderBookmark = "notchDownloadsFolderBookmark"
-    // Watch: any part of any window read live in the island.
-    static let notchWatchEnabled = "notchWatchEnabled"
-    static let notchWatchSound = "notchWatchSound"
-    static let notchWatchCondition = "notchWatchCondition"
     static let notchCalendarEnabled = "notchCalendarEnabled"
     static let notchCalendarCountdown = "notchCalendarCountdown"
     static let notchCalendarTimeLeft = "notchCalendarTimeLeft" // the event under way counts down to its end
@@ -918,6 +927,9 @@ enum DefaultsKey {
     static let notchLowBatteryEarly = "notchLowBatteryEarly"
     static let notchLowBatteryEarlyThreshold = "notchLowBatteryEarlyThreshold"
     static let notchLowBatteryMenuBar = "notchLowBatteryMenuBar"
+    // Battery charge cap
+    static let notchChargeLimitEnabled = "notchChargeLimitEnabled"
+    static let notchChargeLimitPercent = "notchChargeLimitPercent" // ChargeLimitSupport.range, in steps of 5
     static let notchHoverDelay = "notchHoverDelay"
     static let notchCloseDelay = "notchCloseDelay"
     static let notchReturnHome = "notchReturnHome"
@@ -1211,6 +1223,7 @@ enum Defaults {
         DefaultsKey.appearance: AppAppearance.fallback.rawValue,
         DefaultsKey.liquidGlassEnabled: true,
         DefaultsKey.notchLiquidGlassEnabled: true,
+        DefaultsKey.notchGlassStyle: NotchGlassStyle.fallback.rawValue,
         DefaultsKey.clamshellPreferred: false,
         DefaultsKey.dimScreenOnLidClose: false,
         DefaultsKey.defaultDuration: 0,
@@ -1475,6 +1488,8 @@ enum Defaults {
         DefaultsKey.notchPomodoroLongBreakMinutes: 15,
         DefaultsKey.notchPomodoroLongBreakInterval: 4,
         DefaultsKey.notchPomodoroTotalSessions: 4,
+        // Timer presets
+        DefaultsKey.notchTimerPresets: Data(),
         DefaultsKey.notchCameraEnabled: true,
         DefaultsKey.notchAccessoriesEnabled: true,
         DefaultsKey.notchCalendarEnabled: true,
@@ -1507,9 +1522,6 @@ enum Defaults {
         DefaultsKey.notchLiveEqualizer: true,
         DefaultsKey.notchQueueEnabled: true,
         DefaultsKey.notchDownloadsEnabled: true,
-        DefaultsKey.notchWatchEnabled: true,
-        DefaultsKey.notchWatchSound: true,
-        DefaultsKey.notchWatchCondition: NotchWatchCondition.changes.rawValue,
         DefaultsKey.notchEnabled: false,
         DefaultsKey.notchDisplay: NotchDisplay.automatic.rawValue,
         DefaultsKey.notchSilhouette: NotchSilhouette.capsule.rawValue,
@@ -1529,6 +1541,9 @@ enum Defaults {
         DefaultsKey.notchLowBatteryEarly: false,
         DefaultsKey.notchLowBatteryEarlyThreshold: NotchSupport.defaultEarlyBatteryThreshold,
         DefaultsKey.notchLowBatteryMenuBar: true,
+        // Battery charge cap
+        DefaultsKey.notchChargeLimitEnabled: false,
+        DefaultsKey.notchChargeLimitPercent: ChargeLimitSupport.defaultLimit,
         DefaultsKey.notchHoverDelay: NotchSupport.defaultHoverDelay,
         DefaultsKey.notchCloseDelay: NotchSupport.defaultCloseDelay,
         DefaultsKey.notchReturnHome: false,
@@ -1833,6 +1848,8 @@ enum Defaults {
         DefaultsKey.micMuteShortcut: GlobalShortcut.micMuteDefault.storageValue,
         DefaultsKey.cameraPreviewShortcutEnabled: false,
         DefaultsKey.cameraPreviewShortcut: GlobalShortcut.cameraPreviewDefault.storageValue,
+        // Mirror selfie
+        DefaultsKey.notchSelfieSavesToDownloads: false,
         DefaultsKey.wallpaperApplyAllDisplays: true,
         DefaultsKey.wallpaperFilter: "all",
         DefaultsKey.scratchpadShortcutEnabled: false,
@@ -2008,6 +2025,11 @@ enum Defaults {
         migrateNotchAgentsOptIn(in: defaults)
         migrateExistingNotchDefaults(in: defaults)
         migrateLiquidGlassIsland(in: defaults)
+        if #available(macOS 26, *) {
+            LiquidGlassMigration.prepare(in: defaults, supportsGlass: true)
+        } else {
+            LiquidGlassMigration.prepare(in: defaults, supportsGlass: false)
+        }
         migrateFanControlVisibility(in: defaults)
         migrateScrollInverterAxes(in: defaults)
         migrateLinearScrollAvailability(in: defaults)
@@ -2016,7 +2038,7 @@ enum Defaults {
         migratePowerPeripheralsVisibility(in: defaults)
         migrateSwitcherPreviewSize(in: defaults)
         migrateSwitcherPreviewExcludedApps(in: defaults)
-        migrateNotchWatchAvailability(in: defaults)
+        removeRetiredNotchWatch(in: defaults)
         defaults.register(defaults: registeredDefaults)
         defaults.register(defaults: AppFeature.availabilityDefaults)
         activateBetaChannelIfRunningBeta(in: defaults)
@@ -2265,14 +2287,29 @@ enum Defaults {
                      forKey: DefaultsKey.scrollInverterHorizontalEnabled)
     }
 
-    /// Watch arrived installed, as one of the island's extensions. Whoever
-    /// left the island out keeps it out: an extension installed on its own
-    /// would bring the Dynamic Island page back to Settings after an update.
-    static func migrateNotchWatchAvailability(in defaults: UserDefaults) {
-        guard defaults.object(forKey: AppFeature.notchWatch.availabilityKey) == nil,
-              defaults.object(forKey: AppFeature.notch.availabilityKey) as? Bool == false
-        else { return }
-        defaults.set(false, forKey: AppFeature.notchWatch.availabilityKey)
+    /// The island's Watch section left the app in 1.2.0. What it saved goes
+    /// with it: its own switches, its install, and its name in the lists of
+    /// island sections. Every step reads before it writes, so a launch that
+    /// finds nothing left changes nothing, and a restored older backup is
+    /// cleaned again on the next launch.
+    static let retiredNotchWatchKeys = ["notchWatchEnabled", "notchWatchSound", "notchWatchCondition",
+                                        DefaultsKey.featureAvailable("notchWatch")]
+
+    static func removeRetiredNotchWatch(in defaults: UserDefaults) {
+        for key in retiredNotchWatchKeys where defaults.object(forKey: key) != nil {
+            defaults.removeObject(forKey: key)
+        }
+        let lists = [(DefaultsKey.notchHiddenModules, "watch"), (DefaultsKey.notchModuleOrder, "watch"),
+                     (DefaultsKey.featureHubKeptFeatures, "notchWatch")]
+        for (key, retired) in lists {
+            guard let saved = defaults.string(forKey: key) else { continue }
+            let items = saved.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+            guard items.contains(retired) else { continue }
+            defaults.set(items.filter { $0 != retired }.joined(separator: ","), forKey: key)
+        }
+        if defaults.string(forKey: DefaultsKey.notchHomeModule) == "watch" {
+            defaults.removeObject(forKey: DefaultsKey.notchHomeModule)
+        }
     }
 
     /// Linear scrolling reached development builds installed, before new

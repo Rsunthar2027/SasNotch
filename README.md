@@ -153,6 +153,14 @@ cd SasNotch
 
 This builds a separate "SasNotch (Developer)" app and installs it. Run the tests with `./build.sh --test`. To work in Xcode, open `Package.swift`. [CONTRIBUTING.md](CONTRIBUTING.md) has the details.
 
+## Publishing notes for a new version
+
+1. Add a `## [x.y.z]` section to `CHANGELOG.md`, using `### Added`, `### Changed`, `### Fixed` and `### Removed`.
+2. Push the tag `vx.y.z`. `release.yml` publishes the GitHub Release with that section as its notes.
+3. The release calls the `VERCEL_DEPLOY_HOOK` repository secret, and the website rebuilds from GitHub Releases.
+4. The new version appears on [sasnotch.vercel.app/updates](https://sasnotch.vercel.app/updates) and in its feed, `/updates.xml`.
+5. To reword a bullet on the site, edit `data/releases.json` in the [website repo](https://github.com/Rsunthar2027/SasNotch-site).
+
 ## Credits
 
 SasNotch is a derivative work. It is built on, and inspired by, these open-source projects, all under the GNU General Public License v3:

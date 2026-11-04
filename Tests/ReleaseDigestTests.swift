@@ -203,7 +203,8 @@ enum ReleaseDigestTests {
             ("Changed", "Command Bar opens and searches faster, with the same matching and ranking rules.", [.commandBar]),
             ("Changed", "Save as GIF and Copy as GIF work for recordings of any length.", [.screenRecorder]),
             ("Fixed", "Mouse navigation handles quick changes between Back and Forward when the app's menu state has not caught up.", [.mouseNavigation]),
-            ("Fixed", "Watch reads the complete percentage, including values above 999%, spaces between thousands and negative signs.", [.notchWatch]),
+            // Watch left the app, so its old entries name no feature.
+            ("Fixed", "Watch reads the complete percentage, including values above 999%, spaces between thousands and negative signs.", []),
             ("Dynamic Island", "Calendar adds countdowns to the events you choose, the time left in the current event, week numbers and a choice of calendars.", [.notch, .notchCalendar]),
             ("Fixed", "Uninstalling the last copy of an app clears its Command Bar shortcuts, aliases, pins and hidden entries.", [.commandBar]),
             ("Fixed", "Brightness keys keep their press and release together when displays reconnect or the pointer changes displays.", [.brightness]),

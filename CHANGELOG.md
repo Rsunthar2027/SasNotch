@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-04
+
+### Removed
+- The Watch feature, its island section and its ⌥⌘O shortcut. Its saved settings are cleared on first launch.
+
+### Added
+- Timer presets. A Presets menu under the island timer's clock starts Focus (25 min), Break (5 min) or Deep Work (45 min), and you can add, rename, retime and delete your own: up to 12, from 1 to 180 minutes.
+- Selfies in Mirror. A camera button copies the frame on screen to the clipboard, flipped like the preview. A switch in Settings › Dynamic Island › Mirror also saves each one to Downloads.
+- A Terminal tab, off by default, under Advanced features (⌥⌘X). It runs one command at a time in your login shell and refuses sudo, su and doas. There's no PTY, so vim, top and anything that asks for input still need Terminal.
+- A charge limit notice next to the island's battery settings: off by default, 50–100%, 80% to start. At the limit the island shows a notice and a notification tells you to unplug. SasNotch can't stop your Mac from charging.
+- A layered app icon with dark and tinted versions for macOS 26.
+- A What's new link next to an available update in Settings, to its notes on the website.
+
+### Changed
+- New installs start with a simpler setup: 12 core tiles that stay on, 12 more tools with a switch each, the first four on, and everything else in a collapsed Advanced section. Macs updating from an earlier version keep what they have installed and are asked once whether to switch. Reset to recommended setup is on the Features page.
+- On macOS 26 the open island, its tiles and its buttons use Apple's Liquid Glass, with black only over the camera housing. The default is clear glass with a light tint; Regular and Extra clear are in Settings. Reduce Transparency, Increase Contrast and Reduce Motion are each respected.
+- Better label legibility on Liquid Glass.
+- Macs on macOS 26 move to Liquid Glass once and are told. A Mac set up on an older macOS is asked once after it upgrades. Before macOS 26 nothing changes.
+- With no input, a closed island reads the window list once a second instead of four times. In a debug build, mean CPU went from 0.61% to 0.39%.
+- The camera prompt now says a photo is taken only when you press the selfie button.
+
 ## [1.1.0] - 2026-10-26
 
 ### Added

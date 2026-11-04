@@ -198,6 +198,9 @@ final class NotchService: ObservableObject {
     private var awaitsTrackNotice = false
     private var powerSource: CFRunLoopSource?
     private var powerSampler: PowerSampler?
+    /// Kept through the island's teardowns, such as the lock screen, so
+    /// coming back to a Mac still plugged in past the limit says nothing new.
+    private var chargeLimit = ChargeLimitMonitor()
     private var captureID: UUID?
     private var captureFallback: (() -> Void)?
     private var captureClose: (() -> Void)?
@@ -505,10 +508,6 @@ final class NotchService: ObservableObject {
         NotchTimerSupport.showsActivity(NotchTimerService.shared.session)
     }
 
-    var hasWatchActivity: Bool {
-        NotchWatchSupport.isEnabled() && NotchWatchService.shared.isActive
-    }
-
     var hasDownloadActivity: Bool {
         NotchSupport.routes(.download)
             && NotchDownloadService.shared.items.contains { $0.active && !$0.completed }
@@ -544,7 +543,7 @@ final class NotchService: ObservableObject {
     }
 
     var compactActivities: [NotchCompactActivity] {
-        NotchSupport.compactActivities(timer: hasTimerActivity, watch: hasWatchActivity, downloads: hasDownloadActivity,
+        NotchSupport.compactActivities(timer: hasTimerActivity, downloads: hasDownloadActivity,
                                       agents: hasAgentActivity, calendar: hasCalendarActivity,
                                       music: hasMusicActivity, keepAwake: hasKeepAwakeActivity)
     }
@@ -666,7 +665,6 @@ final class NotchService: ObservableObject {
             let name = NotchDownloadService.shared.items.first { $0.active && !$0.completed }?.name
             return geometry.compactDownloadGeometry(wing: NotchDownloadSupport.compactWing(for: name, in: geometry))
         case .agents: return geometry.compactAgentGeometry(wing: agentStripWing(in: geometry))
-        case .watch: return geometry.compactWatchGeometry(wing: watchStripWing(in: geometry))
         case .calendar:
             return geometry.compactCalendarGeometry(wing: calendarStripWing(for: companion, in: geometry),
                                                     paired: companion != nil)
@@ -674,20 +672,6 @@ final class NotchService: ObservableObject {
         case .keepAwake: return geometry.compactTimerGeometry(showsDownloads: false, wing: keepAwakeStripWing(in: geometry))
         default: return geometry
         }
-    }
-
-    /// The wider side: the eye at the left end, or the reading, or the
-    /// area's own picture when it has no text, with air beside the camera.
-    private func watchStripWing(in geometry: NotchGeometry) -> CGFloat {
-        let provisional = geometry.compactWatchGeometry(wing: NotchWatchSupport.stripWingRange.lowerBound)
-        let watch = NotchWatchService.shared
-        let size = NotchTimerSupport.stripTextSize(height: provisional.compactActivityContentHeight)
-        let reading = watch.showsThumbnail ? NotchWatchSupport.thumbnailWidth
-            : (watch.headline as NSString).size(withAttributes: [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: size, weight: .medium)
-            ]).width.rounded(.up)
-        let inset = provisional.compactActivityEdgeInset(boxHeight: size * 0.72, radius: 0)
-        return reading + inset + NotchTimerSupport.stripCameraGap
     }
 
     private func keepAwakeStripWing(in geometry: NotchGeometry) -> CGFloat {
@@ -1075,9 +1059,6 @@ final class NotchService: ObservableObject {
             return layout.calendarSurface(title: layout.calendarTitle(countdown, language: language),
                                           time: NotchCalendarSupport.timeText(countdown, locale: language.formattingLocale()),
                                           geometry: geometry)
-        case .watch:
-            let watch = NotchWatchService.shared
-            return layout.watchSurface(reading: watch.headline, thumbnail: watch.showsThumbnail, geometry: geometry)
         case .keepAwake:
             let reading = KeepAwakeManager.shared.endDate.map {
                 NotchKeepAwakeSupport.compactText(until: $0, now: Date(), locale: Locale(identifier: language.rawValue))
@@ -1120,13 +1101,6 @@ final class NotchService: ObservableObject {
         })
     }
 
-    /// Every island window, whatever the "show in captures" preference says.
-    /// Watch keeps them all out while it chooses and reads an area, since
-    /// what it watches must never be the island itself.
-    var captureChromeWindowIDs: Set<CGWindowID> {
-        running ? islandWindowIDs : []
-    }
-
     func syncWithPreferences() {
         preferenceSyncWork?.cancel(); preferenceSyncWork = nil
         guard NotchSupport.isEnabled() else { stop(); return }
@@ -1136,9 +1110,6 @@ final class NotchService: ObservableObject {
         }
         syncShortcut()
         if !NotchTimerSupport.isEnabled() { NotchTimerService.shared.stop() }
-        // A watch keeps reading while the island is away, as on the lock
-        // screen, and says so with a notification if it cannot show itself.
-        NotchWatchService.shared.syncWithPreferences()
         // Requested file work can continue while locked, but disabling its
         // feature must still cancel it before presentation resumes.
         NotchFileToolsService.shared.syncWithPreferences()
@@ -1146,6 +1117,9 @@ final class NotchService: ObservableObject {
         // Paused while the island is away, the section still stops at once
         // when it is turned off.
         if !NotchAgentSupport.isEnabled() { AgentUsageService.shared.stop() }
+        // A command keeps running while the island is away; turning its page
+        // off ends it.
+        NotchTerminalService.shared.syncWithPreferences()
         guard !suspended else {
             if session.canRunTimer { NotchTimerService.shared.syncWithPreferences() }
             else { NotchTimerService.shared.suspend() }
@@ -1183,6 +1157,7 @@ final class NotchService: ObservableObject {
             + String(NotchSupport.routesShelf()) + String(NotchSupport.revealsShelfDrag())
             + String(NotchSupport.routesCaptureControls())
             + String(NotchMascotSupport.isEnabled())
+            + String(ChargeLimitSupport.isEnabled())
         if signature != settingsSignature {
             settingsSignature = signature
             bindEvents()
@@ -1211,6 +1186,14 @@ final class NotchService: ObservableObject {
         // the island's size publishes nothing else: hiding a control left the
         // open island, and the preview in Settings, as they were.
         objectWillChange.send()
+        // Switched on or moved, the limit is checked against the charge now
+        // rather than at the next reading; switched off, it forgets the
+        // charging session it spoke for.
+        if !ChargeLimitSupport.isEnabled() {
+            chargeLimit = ChargeLimitMonitor()
+        } else if powerSampler != nil, let notice = chargeLimitNotice(for: power) {
+            show(notice)
+        }
         if AppFeature.mixer.isAvailable { PreciseVolumeRollerService.shared.syncWithPreferences() }
         if AppFeature.brightness.isAvailable { BrightnessService.shared.syncWithPreferences() }
     }
@@ -1256,6 +1239,7 @@ final class NotchService: ObservableObject {
         NotchLyricsService.shared.stop()
         NotchFileToolsService.shared.stop()
         AgentUsageService.shared.stop()
+        NotchTerminalService.shared.stop()
         guard running else { return }
         running = false
         NotchTimerService.shared.stop()
@@ -1263,7 +1247,6 @@ final class NotchService: ObservableObject {
         FocusStatusService.shared.stop()
         NotchRemindersService.shared.stop()
         PrivacyIndicatorService.shared.stop()
-        NotchWatchService.shared.stop()
         let cancelCapture = captureControlsCancel
         endCaptureControls()
         cancelCapture?()
@@ -2387,8 +2370,7 @@ final class NotchService: ObservableObject {
         open(selectedNotice.event == .download ? .downloads : selectedNotice.event == .timer ? .timer
              : selectedNotice.event == .accessory ? .system : selectedNotice.event == .systemNotification ? .notifications
              : selectedNotice.event == .clipboard ? .clipboard : selectedNotice.event == .agents ? .agents
-             : selectedNotice.event == .track ? .music : selectedNotice.event == .microphone ? .mixer
-             : selectedNotice.event == .watch ? .watch : .controls)
+             : selectedNotice.event == .track ? .music : selectedNotice.event == .microphone ? .mixer : .controls)
     }
 
     /// Skipping through songs, or a title that lands before its artist, shows
@@ -4068,19 +4050,6 @@ final class NotchService: ObservableObject {
                     self?.refreshPresentation()
                 }.store(in: &subscriptions)
         }
-        if modules.contains(.watch) {
-            // The strip resizes with its reading, and when the area turns
-            // out to hold only a picture.
-            let watch = NotchWatchService.shared
-            Publishers.CombineLatest3(watch.$state.removeDuplicates(), watch.$headline.removeDuplicates(),
-                                      watch.$preview.map { $0 != nil }.removeDuplicates())
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] _ in
-                    self?.syncMenuSpaceMonitoring()
-                    self?.objectWillChange.send()
-                    self?.refreshPresentation()
-                }.store(in: &subscriptions)
-        }
         if modules.contains(.music) {
             let music = NotchMusicService.shared
             music.$playback.combineLatest(music.$artwork, music.$artworkTint)
@@ -4267,8 +4236,10 @@ final class NotchService: ObservableObject {
                                       detail: text.title, symbol: "doc.on.clipboard"))
             }.store(in: &subscriptions)
         }
-        // The companion loves being plugged in, so it listens for the charger too.
-        if NotchSupport.routes(.battery) || idleContent == .battery || NotchMascotSupport.isEnabled() { startPower() }
+        // The companion loves being plugged in, so it listens for the charger
+        // too, and so does the charge limit.
+        if NotchSupport.routes(.battery) || idleContent == .battery || NotchMascotSupport.isEnabled()
+            || ChargeLimitSupport.isEnabled() { startPower() }
     }
 
     private func showAgentEvent(_ event: AgentUsageEvent) {
@@ -4442,19 +4413,40 @@ final class NotchService: ObservableObject {
         power = next
         let pluggedIn = !before.externalConnected && next.externalConnected
         let low = (next.chargePercent ?? 100) <= 20 && (before.chargePercent ?? 0) > 20
+        let charged = next.externalConnected && before.isCharging && !next.isCharging && next.chargePercent == 100
+        let reaction = NotchMascotSupport.powerReaction(pluggedIn: pluggedIn, charged: charged, low: low)
+        // Reaching the limit outranks saying the Mac is charging: it is the
+        // one battery notice that asks for something.
+        if let limitNotice = chargeLimitNotice(for: next, mascot: reaction) {
+            show(limitNotice)
+            if let reaction { reactMascot(reaction) }
+            return
+        }
         guard before.externalConnected != next.externalConnected || low
                 || (before.isCharging && !next.isCharging && next.chargePercent == 100) else { return }
         let text = FeatureStrings.notch(L10n.shared.language)
         let title = low ? text.lowBattery : next.externalConnected
             ? (next.isCharging ? text.charging : next.chargePercent == 100
                 ? text.charged : L10n.shared.s.powerPluggedIn) : text.onBattery
-        let charged = next.externalConnected && before.isCharging && !next.isCharging && next.chargePercent == 100
-        let reaction = NotchMascotSupport.powerReaction(pluggedIn: pluggedIn, charged: charged, low: low)
         show(NotchNotice(event: .battery, title: title,
                          detail: next.chargePercent.map { "\($0)%" } ?? "",
                          symbol: next.externalConnected ? "battery.100percent.bolt" : "battery.25percent",
                          mascot: reaction))
         if let reaction { reactMascot(reaction) }
+    }
+
+    /// Hands the charge limit a reading. The first one this charging session
+    /// at or past the limit posts the notification, which goes out even when
+    /// battery notices are off in the island, and returns the island's notice.
+    private func chargeLimitNotice(for reading: PowerReading, mascot: NotchMascotReaction? = nil) -> NotchNotice? {
+        let limit = ChargeLimitSupport.limit()
+        guard chargeLimit.update(percent: reading.chargePercent, onAC: reading.externalConnected,
+                                 limit: limit, enabled: ChargeLimitSupport.isEnabled()) else { return nil }
+        let percent = reading.chargePercent ?? limit
+        Notifier.post(title: ChargeLimitText.notificationTitle,
+                      body: ChargeLimitText.notificationBody(percent: percent))
+        return NotchNotice(event: .battery, title: ChargeLimitText.noticeTitle, detail: "\(percent)%",
+                           symbol: "powerplug", mascot: mascot)
     }
 
     private func syncVisibleConsumers() {

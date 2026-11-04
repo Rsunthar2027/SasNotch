@@ -40,6 +40,9 @@ struct NotchClipboardView: View {
     @State private var keysMoved = false
     @Environment(\.notchSettingsPreview) private var preview
     @Environment(\.notchGlassSurface) private var glassSurface
+    @Environment(\.notchTileRadius) private var tileRadius
+    /// On glass a card's corners are concentric with the island's.
+    private var cardRadius: CGFloat { glassSurface ? min(14, tileRadius) : 14 }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var text: ClipboardFeatureStrings { FeatureStrings.clipboard(l10n.language) }
     private static let listSpace = "notch.clipboard.list"
@@ -252,7 +255,7 @@ struct NotchClipboardView: View {
             card(entry, lifted: true) { expandedCard(entry, place: place) }
                 .frame(height: height)
                 .background {
-                    let backing = RoundedRectangle(cornerRadius: 14, style: .continuous).inset(by: -1)
+                    let backing = RoundedRectangle(cornerRadius: cardRadius, style: .continuous).inset(by: -1)
                     Group {
                         if glassSurface { backing.fill(.ultraThickMaterial) } else { backing.fill(.black) }
                     }
@@ -342,7 +345,7 @@ struct NotchClipboardView: View {
                 .accessibilityLabel(app.name)
         } else {
             Image(systemName: kindSymbol(entry))
-                .font(.system(size: 10)).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -357,7 +360,7 @@ struct NotchClipboardView: View {
     /// Liquid Glass instead, as an opaque gray would stand out of the glass.
     private func card<Content: View>(_ entry: ClipboardHistoryEntry, lifted: Bool = false,
                                      @ViewBuilder content: () -> Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: cardRadius, style: .continuous)
         return content()
             .modifier(NotchControlSurface(cornerRadius: 14, selected: entry.isPinned))
             .background {
@@ -367,8 +370,8 @@ struct NotchClipboardView: View {
             }
             .overlay {
                 ZStack {
-                    if lifted { shape.strokeBorder(.white.opacity(0.14), lineWidth: 0.5) }
-                    shape.strokeBorder(.white.opacity(highlightedID == entry.id ? 0.34 : 0), lineWidth: 1)
+                    if lifted { shape.strokeBorder(.primary.opacity(0.14), lineWidth: 0.5) }
+                    shape.strokeBorder(.primary.opacity(highlightedID == entry.id ? 0.34 : 0), lineWidth: 1)
                 }
                 .allowsHitTesting(false)
             }
@@ -428,7 +431,7 @@ struct NotchClipboardView: View {
                 Image(nsImage: icon).resizable().interpolation(.high).frame(width: 14, height: 14)
                     .accessibilityHidden(true)
             } else {
-                Image(systemName: kindSymbol(entry)).font(.system(size: 10)).foregroundStyle(.secondary)
+                Image(systemName: kindSymbol(entry)).font(.caption).foregroundStyle(.secondary)
             }
         }
         .frame(width: 14)
@@ -503,7 +506,7 @@ struct NotchClipboardView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField(text.search, text: $query).textFieldStyle(.plain)
-                .font(.system(size: 12))
+                .font(.callout)
                 .focused($searching)
                 .accessibilityLabel(text.search)
         }
@@ -511,8 +514,8 @@ struct NotchClipboardView: View {
         .frame(height: NotchLayout.clipboardSearchHeight)
         .modifier(NotchControlSurface(cornerRadius: 14))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(.white.opacity(searching ? 0.34 : 0), lineWidth: 1)
+            RoundedRectangle(cornerRadius: cardRadius, style: .continuous)
+                .strokeBorder(.primary.opacity(searching ? 0.34 : 0), lineWidth: 1)
                 .allowsHitTesting(false)
         }
         .animation(.easeOut(duration: 0.15), value: searching)
@@ -615,7 +618,7 @@ struct NotchClipboardView: View {
                     .help("\(text.imageEntryLabel) · \(entry.imageDimensionsLabel)")
             } else {
                 searchText("\(text.imageEntryLabel) · \(entry.imageDimensionsLabel)", matching: searchTokens)
-                    .font(.system(size: 12))
+                    .font(.callout)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         case .files:
@@ -642,7 +645,7 @@ struct NotchClipboardView: View {
                         Label { name } icon: { if open { leadingIcon(entry) } else { Image(systemName: "folder") } }
                     }
                 }
-                .font(.system(size: 12))
+                .font(.callout)
                 .lineLimit(compact ? 1 : 2)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -655,7 +658,7 @@ struct NotchClipboardView: View {
                         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
                 }
                 searchText(open ? openText(entry) : entry.preview, matching: searchTokens)
-                    .font(.system(size: 12))
+                    .font(.callout)
                     .lineLimit(compact ? 2 : open ? NotchClipboardCardSize.maximumOpenLines : 3)
                     .multilineTextAlignment(.leading)
             }
