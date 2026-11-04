@@ -7,6 +7,12 @@ enum LiquidGlassMigrationTests {
     static func run(_ suite: TestSuite) {
         migration(suite)
         plan(suite)
+        suite.expect(UpdateNotesLink.url(version: "1.2.0")?.absoluteString == "https://sasnotch.vercel.app/updates#v1.2.0"
+                     && UpdateNotesLink.url(version: "v1.2.0-beta.1")?.absoluteString == "https://sasnotch.vercel.app/updates#v1.2.0-beta.1",
+                     "an available update links to its notes on the website")
+        suite.expect(UpdateNotesLink.url(version: "") == nil && UpdateNotesLink.url(version: "1.2.0#x") == nil
+                     && UpdateNotesLink.url(version: "evil.example/") == nil,
+                     "anything but a plain version has no link")
         suite.expect(NotchGlassText.requiresMacOS26 == "Requires macOS 26 or later.",
                      "before macOS 26 the setting says what it needs")
     }

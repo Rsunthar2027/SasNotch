@@ -17,10 +17,12 @@ All notable changes to this project are documented here. The format follows
 - A Terminal tab, off by default, under Advanced features (⌥⌘X). It runs one command at a time in your login shell and refuses sudo, su and doas. There's no PTY, so vim, top and anything that asks for input still need Terminal.
 - A charge limit notice next to the island's battery settings: off by default, 50–100%, 80% to start. At the limit the island shows a notice and a notification tells you to unplug. SasNotch can't stop your Mac from charging.
 - A layered app icon with dark and tinted versions for macOS 26.
+- A What's new link next to an available update in Settings, to its notes on the website.
 
 ### Changed
 - New installs start with a simpler setup: 12 core tiles that stay on, 12 more tools with a switch each, the first four on, and everything else in a collapsed Advanced section. Macs updating from an earlier version keep what they have installed and are asked once whether to switch. Reset to recommended setup is on the Features page.
-- On macOS 26 the open island, its tiles and its buttons use Apple's Liquid Glass, in Regular or Clear. Reduce Transparency, Increase Contrast and Reduce Motion are each respected.
+- On macOS 26 the open island, its tiles and its buttons use Apple's Liquid Glass, Clear by default or Regular, with black only over the camera housing. Reduce Transparency, Increase Contrast and Reduce Motion are each respected.
+- Macs on macOS 26 move to Liquid Glass once and are told. A Mac set up on an older macOS is asked once after it upgrades. Before macOS 26 nothing changes.
 - With no input, a closed island reads the window list once a second instead of four times. In a debug build, mean CPU went from 0.61% to 0.39%.
 - The camera prompt now says a photo is taken only when you press the selfie button.
 
