@@ -426,7 +426,7 @@ struct NotchView: View {
         // Beside the camera the row sits on the black the housing keeps, so
         // it stays light on dark there, on glass too.
         .environment(\.colorScheme, band.besideCamera ? .dark : surfaceScheme)
-        .foregroundStyle(band.besideCamera ? AnyShapeStyle(Color.white) : ink)
+        .foregroundStyle(ink)
         .environment(\.notchGlassNamesBySymbol, true)
         // Drawn here rather than in the page, the row's controls read the
         // island's language for their dates and numbers, as the page does.

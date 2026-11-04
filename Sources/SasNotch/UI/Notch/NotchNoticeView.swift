@@ -17,14 +17,14 @@ struct NotchNoticeView: View {
     private var tint: Color {
         switch notice.event {
         // A warning reads as one in any agent's color; other AI notices wear it.
-        case .agents: return notice.symbol.hasPrefix("exclamationmark") ? .orange : notice.agent?.tint ?? .white
+        case .agents: return notice.symbol.hasPrefix("exclamationmark") ? .orange : notice.agent?.tint ?? .primary
         // The timer's notice keeps the orange its strip and page wear.
         case .timer: return .orange
-        default: return .white
+        default: return .primary
         }
     }
     /// The words of a timer's notice share its orange too.
-    private var textTint: Color { notice.event == .timer ? .orange : .white }
+    private var textTint: Color { notice.event == .timer ? .orange : .primary }
     /// With the companion on, it stands in for the symbol, and reacts unless
     /// its reactions are off.
     private var companionReaction: NotchMascotReaction? {
@@ -45,7 +45,7 @@ struct NotchNoticeView: View {
                 .frame(width: wings.trailing, height: geometry.stripHeight)
                 .clipped()
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(.primary)
         .frame(height: geometry.stripHeight)
         // Each side is as wide as what it shows, so the island reaches
         // further toward the wider one and the camera's gap stays over it.
@@ -122,7 +122,7 @@ struct NotchNoticeView: View {
             // one, with the air that fits it beside the camera.
             Text(content.compactDetail)
                 .font(Font(NotchNotificationBannerLayout.messageFont as CTFont))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(.primary.opacity(0.85))
                 .lineLimit(NotchNotificationBannerLayout.messageLines(stripHeight: geometry.stripHeight))
                 .frame(maxWidth: .infinity, alignment: .trailing)
         } else if let level = notice.level {

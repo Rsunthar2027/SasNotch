@@ -17,26 +17,27 @@ enum NotchGlassTests {
     }
 
     private static func style(_ suite: TestSuite) {
-        suite.expect(Defaults.registeredDefaults[DefaultsKey.notchGlassStyle] as? String == NotchGlassStyle.clear.rawValue
+        suite.expect(Defaults.registeredDefaults[DefaultsKey.notchGlassStyle] as? String == NotchGlassStyle.light.rawValue
                      && SettingsBackupSupport.exportKeys().contains(DefaultsKey.notchGlassStyle),
                      "the island's glass starts Regular and its style travels with settings backups")
-        suite.expect(NotchGlassStyle.fallback == .clear && NotchGlassStyle.allCases == [.regular, .clear],
-                     "the choice is Clear, the default, or Regular")
+        suite.expect(NotchGlassStyle.fallback == .light && NotchGlassStyle.allCases == [.light, .regular, .clear],
+                     "the default is lightly tinted clear glass; Regular and Extra clear are options")
         suite.expect(NotchGlassStyle.sanitized("clear") == .clear && NotchGlassStyle.sanitized("regular") == .regular,
                      "a stored style reads back as itself")
         for raw in [nil, "", "Clear", "REGULAR", "frosted", "identity"] {
-            suite.expect(NotchGlassStyle.sanitized(raw) == .clear,
+            suite.expect(NotchGlassStyle.sanitized(raw) == .light,
                          "an unknown stored style draws the default glass: \(raw ?? "nil")")
         }
         let domain = "sasnotch.tests.glass-style.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: domain)!
         defer { defaults.removePersistentDomain(forName: domain) }
-        suite.expect(NotchGlassStyle.stored(in: defaults) == .clear, "nothing stored reads as the default")
-        defaults.set("regular", forKey: DefaultsKey.notchGlassStyle)
-        suite.expect(NotchGlassStyle.stored(in: defaults) == .regular, "a stored choice is what the island draws")
+        suite.expect(NotchGlassStyle.stored(in: defaults) == .light, "nothing stored reads as the default")
+        defaults.set("clear", forKey: DefaultsKey.notchGlassStyle)
+        suite.expect(NotchGlassStyle.stored(in: defaults) == .clear, "a stored choice is what the island draws")
         defaults.set("mirror", forKey: DefaultsKey.notchGlassStyle)
-        suite.expect(NotchGlassStyle.stored(in: defaults) == .clear, "a hand-edited value falls back")
-        suite.expect(NotchGlassStyle.regular.title == "Regular" && NotchGlassStyle.clear.title == "Clear"
+        suite.expect(NotchGlassStyle.stored(in: defaults) == .light, "a hand-edited value falls back")
+        suite.expect(NotchGlassStyle.regular.title == "Regular" && NotchGlassStyle.clear.title == "Extra clear"
+                     && NotchGlassText.styleCaption.contains("hard to read")
                      && NotchGlassText.style == "Glass style"
                      && NotchGlassText.requiresMacOS26 == "Requires macOS 26 or later.",
                      "the setting and the note before macOS 26 read as written")
@@ -91,6 +92,14 @@ enum NotchGlassTests {
     }
 
     private static func contrast(_ suite: TestSuite) {
+        suite.expect(NotchGlassContrast.surfaceTintOpacity(increasedContrast: false, style: .light) > 0
+                     && NotchGlassContrast.surfaceTintOpacity(increasedContrast: false, style: .light) < 0.5
+                     && NotchGlassContrast.tileTintOpacity(increasedContrast: false, style: .light) > 0,
+                     "the default glass has a light tint, not a dark panel")
+        suite.expect(NotchGlassContrast.surfaceTintOpacity(increasedContrast: false, style: .clear) == 0,
+                     "Extra clear's surface is untinted")
+        suite.expect(NotchGlassContrast.haloOpacity(increasedContrast: false) <= 0.35,
+                     "the text shadow stays soft")
         suite.expect(NotchGlassContrast.surfaceTintOpacity(increasedContrast: false) == 0
                      && NotchGlassContrast.tileTintOpacity(increasedContrast: false) == 0,
                      "the glass is untinted at ordinary contrast")

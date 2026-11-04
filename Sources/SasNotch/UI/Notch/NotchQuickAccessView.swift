@@ -198,6 +198,13 @@ private struct NotchQuickAccessGlassSurface: ViewModifier {
     @ObservedObject var presentation: NotchBackdropPresentation
     let drops: NotchQuickAccessDrops
     let style: NotchGlassStyle
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    /// The same dimming a tile takes, so a glyph reads over a white window.
+    private var dropTint: Color {
+        (scheme == .dark ? Color.black : .white)
+            .opacity(NotchGlassContrast.tileTintOpacity(increasedContrast: contrast == .increased, style: style))
+    }
 
     func body(content: Content) -> some View {
         let island = presentation.usesGlass ? presentation.contour : Path()
@@ -216,7 +223,7 @@ private struct NotchQuickAccessGlassSurface: ViewModifier {
 #if compiler(>=6.2)
         if #available(macOS 26, *) {
             Color.clear
-                .glassEffect(style.glass, in: NotchQuickAccessDropsShape(placements: drops.placements,
+                .glassEffect(style.glass.tint(dropTint), in: NotchQuickAccessDropsShape(placements: drops.placements,
                                                                           progress: drops.progress))
                 .overlay { Color.black.opacity(presentation.restingBlack).mask { drops } }
                 .allowsHitTesting(false)

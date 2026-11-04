@@ -101,8 +101,8 @@ extension EnvironmentValues {
 extension NotchGlassStyle {
     var glass: Glass {
         switch self {
+        case .light, .clear: return .clear
         case .regular: return .regular
-        case .clear: return .clear
         }
     }
 }

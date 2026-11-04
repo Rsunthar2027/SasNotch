@@ -5,15 +5,17 @@ import CoreGraphics
 import Foundation
 
 /// The variant of Apple's Liquid Glass the open island uses on macOS 26.
-/// Clear, the default, lets what lies behind the island through; Regular is
-/// the system's heavier material, which reads as a tinted panel.
+/// Light, the default, is clear glass with a light tint, so what's behind the
+/// island shows through and text still reads over a white window. Regular is
+/// the system's heavier material. Extra clear is untinted, at a cost in legibility.
 enum NotchGlassStyle: String, CaseIterable, Identifiable {
+    case light
     case regular
     case clear
 
     var id: String { rawValue }
 
-    static let fallback: NotchGlassStyle = .clear
+    static let fallback: NotchGlassStyle = .light
 
     /// An unknown or hand-edited value never breaks the island; it draws the
     /// default glass.
@@ -28,6 +30,7 @@ enum NotchGlassStyle: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .light: return NotchGlassText.light
         case .regular: return NotchGlassText.regular
         case .clear: return NotchGlassText.clear
         }
@@ -37,9 +40,10 @@ enum NotchGlassStyle: String, CaseIterable, Identifiable {
 /// English-only text for the island's glass settings.
 enum NotchGlassText {
     static let style = "Glass style"
+    static let light = "Light"
     static let regular = "Regular"
-    static let clear = "Clear"
-    static let styleCaption = "Regular adapts to what's behind the island. Clear lets more of it show through."
+    static let clear = "Extra clear"
+    static let styleCaption = "Light keeps what's behind the island in view. Regular is the most readable. Extra clear shows the most, but text can be hard to read over bright windows."
     static let requiresMacOS26 = "Requires macOS 26 or later."
 }
 
@@ -92,17 +96,24 @@ enum NotchGlassSeam {
 enum NotchGlassContrast {
     /// Increase Contrast lays a more opaque tint of the surface's own tone
     /// over the glass, so content reads against any wallpaper.
-    static func surfaceTintOpacity(increasedContrast: Bool) -> Double { increasedContrast ? 0.55 : 0 }
+    static func surfaceTintOpacity(increasedContrast: Bool, style: NotchGlassStyle = .regular) -> Double {
+        if increasedContrast { return 0.55 }
+        return style == .light ? 0.32 : 0
+    }
     /// Apple's guidance for clear glass over bright content: a light dimming
     /// of its own, so a tile's text reads over a white window. Regular has
     /// its own; only Increase Contrast adds to it.
     static func tileTintOpacity(increasedContrast: Bool, style: NotchGlassStyle = .regular) -> Double {
-        if increasedContrast { return style == .clear ? 0.5 : 0.35 }
-        return style == .clear ? 0.3 : 0
+        switch style {
+        case .light: return increasedContrast ? 0.5 : 0.26
+        case .clear: return increasedContrast ? 0.5 : 0.3
+        case .regular: return increasedContrast ? 0.35 : 0
+        }
     }
-    static let haloRadius: CGFloat = 2.5
-    /// The halo behind glyphs on the glass, in the tone opposite the ink.
-    static func haloOpacity(increasedContrast: Bool) -> Double { increasedContrast ? 0.85 : 0.5 }
+
+    static let haloRadius: CGFloat = 3
+    /// The soft shadow behind glyphs on the glass, in the tone opposite the ink.
+    static func haloOpacity(increasedContrast: Bool) -> Double { increasedContrast ? 0.6 : 0.35 }
     /// The outline every tile and button on the glass carries.
     static func strokeOpacity(increasedContrast: Bool, selected: Bool = false) -> Double {
         increasedContrast ? (selected ? 0.75 : 0.5) : 0

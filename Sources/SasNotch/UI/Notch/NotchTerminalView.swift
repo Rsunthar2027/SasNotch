@@ -62,12 +62,12 @@ struct NotchTerminalView: View {
             Text(terminal.displayDirectory)
                 .lineLimit(1)
                 .truncationMode(.head)
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: max(60, size.width * 0.4), alignment: .leading)
                 .layoutPriority(1)
                 .help(terminal.directory)
             Text(terminal.promptSymbol)
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             TextField(NotchTerminalText.placeholder, text: $input)
                 .textFieldStyle(.plain)
@@ -82,7 +82,7 @@ struct NotchTerminalView: View {
         .modifier(NotchControlSurface(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(.white.opacity(focused ? 0.3 : 0), lineWidth: 1)
+                .strokeBorder(.primary.opacity(focused ? 0.3 : 0), lineWidth: 1)
                 .allowsHitTesting(false)
         }
         .animation(.easeOut(duration: 0.15), value: focused)
@@ -142,7 +142,7 @@ private struct NotchTerminalOutputList: View {
                 if output.isEmpty, !running {
                     Text(NotchTerminalText.emptyHint)
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
                         .padding(16)
                         .allowsHitTesting(false)
@@ -169,8 +169,8 @@ private struct NotchTerminalOutputList: View {
 
     private static func color(_ kind: NotchTerminalLineKind) -> Color {
         switch kind {
-        case .command: return .white
-        case .output: return .white.opacity(0.82)
+        case .command: return .primary
+        case .output: return .primary.opacity(0.82)
         case .error: return Color(red: 1, green: 0.56, blue: 0.52)
         case .notice: return Color(red: 0.98, green: 0.78, blue: 0.42)
         }

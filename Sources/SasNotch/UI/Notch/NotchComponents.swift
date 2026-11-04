@@ -612,7 +612,7 @@ struct NotchSurfaceBackground: View {
     /// it; otherwise the glass is untinted, as Apple draws its surfaces.
     @available(macOS 26, *)
     private var surfaceGlass: Glass {
-        let opacity = NotchGlassContrast.surfaceTintOpacity(increasedContrast: contrast == .increased)
+        let opacity = NotchGlassContrast.surfaceTintOpacity(increasedContrast: contrast == .increased, style: style)
         guard opacity > 0 else { return style.glass }
         return style.glass.tint((scheme == .dark ? Color.black : Color.white).opacity(opacity))
     }

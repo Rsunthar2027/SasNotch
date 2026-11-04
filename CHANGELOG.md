@@ -21,7 +21,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 - New installs start with a simpler setup: 12 core tiles that stay on, 12 more tools with a switch each, the first four on, and everything else in a collapsed Advanced section. Macs updating from an earlier version keep what they have installed and are asked once whether to switch. Reset to recommended setup is on the Features page.
-- On macOS 26 the open island, its tiles and its buttons use Apple's Liquid Glass, Clear by default or Regular, with black only over the camera housing. Reduce Transparency, Increase Contrast and Reduce Motion are each respected.
+- On macOS 26 the open island, its tiles and its buttons use Apple's Liquid Glass, with black only over the camera housing. The default is clear glass with a light tint; Regular and Extra clear are in Settings. Reduce Transparency, Increase Contrast and Reduce Motion are each respected.
+- Better label legibility on Liquid Glass.
 - Macs on macOS 26 move to Liquid Glass once and are told. A Mac set up on an older macOS is asked once after it upgrades. Before macOS 26 nothing changes.
 - With no input, a closed island reads the window list once a second instead of four times. In a debug build, mean CPU went from 0.61% to 0.39%.
 - The camera prompt now says a photo is taken only when you press the selfie button.
