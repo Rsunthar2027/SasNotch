@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-11-03
+## [1.2.0] - 2026-11-04
 
 ### Removed
 - The Watch feature, its island section and its ⌥⌘O shortcut. Its saved settings are cleared on first launch.
