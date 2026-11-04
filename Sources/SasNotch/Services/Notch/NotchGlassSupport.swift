@@ -5,15 +5,15 @@ import CoreGraphics
 import Foundation
 
 /// The variant of Apple's Liquid Glass the open island uses on macOS 26.
-/// Regular is the system's default material; Clear lets more of what lies
-/// behind the island through, as Apple's clear glass does over media.
+/// Clear, the default, lets what lies behind the island through; Regular is
+/// the system's heavier material, which reads as a tinted panel.
 enum NotchGlassStyle: String, CaseIterable, Identifiable {
     case regular
     case clear
 
     var id: String { rawValue }
 
-    static let fallback: NotchGlassStyle = .regular
+    static let fallback: NotchGlassStyle = .clear
 
     /// An unknown or hand-edited value never breaks the island; it draws the
     /// default glass.
@@ -67,39 +67,23 @@ enum NotchGlassGeometry {
     }
 }
 
-/// The black kept over the physical camera on Liquid Glass. Only a display
-/// with a camera housing has a seam to hide; a capsule or an island on a
-/// display without one is glass from its top edge.
+/// The black kept over the physical camera on Liquid Glass: the housing's own
+/// rect and nothing else, so the glass starts right at its edge. Only a
+/// display with a camera housing has one; a capsule or an island on a display
+/// without one is glass from its top edge.
 enum NotchGlassSeam {
-    /// Short enough that the page below the camera's row sits on clear glass.
-    static let rampLength: CGFloat = 10
+    /// The housing's own curve, so the black never shows past the hardware.
+    static let cornerRadius: CGFloat = 10
 
-    static func height(stripHeight: CGFloat, isNotched: Bool, floats: Bool) -> CGFloat {
-        guard isNotched, !floats, stripHeight.isFinite else { return 0 }
-        return max(0, stripHeight)
+    static func size(cutout: CGSize, floats: Bool) -> CGSize {
+        guard !floats, cutout.width.isFinite, cutout.height.isFinite, cutout.width > 0, cutout.height > 0 else { return .zero }
+        return cutout
     }
 
-    /// Opaque over the camera strip, then released over `rampLength`.
-    /// While the island opens, `openness` below 1 keeps the rest dark, so
-    /// the last frames of a collapse already match the resting black.
-    static func opacity(atDepth depth: CGFloat, seamHeight: CGFloat, openness: Double) -> Double {
-        let open = openness.isFinite ? min(1, max(0, openness)) : 0
-        guard seamHeight > 0 else { return 1 - open }
-        guard depth > seamHeight else { return 1 }
-        let ramp = Double(min(1, (depth - seamHeight) / rampLength))
-        let eased = ramp * ramp * (3 - 2 * ramp)
-        return 1 - open * eased
-    }
-
-    /// Gradient stops over an island `height` points tall, top to bottom.
-    static func stops(height: CGFloat, seamHeight: CGFloat,
-                      openness: Double) -> [(location: Double, opacity: Double)] {
-        guard height > 0, height.isFinite else { return [(0, 1), (1, 1)] }
-        let seam = seamHeight.isFinite ? max(0, seamHeight) : 0
-        let depths = [0, seam] + (1...4).map { seam + rampLength * CGFloat($0) / 4 } + [height]
-        return depths.filter { $0 >= 0 && $0 <= height }.map {
-            (Double($0 / height), opacity(atDepth: $0, seamHeight: seam, openness: openness))
-        }
+    /// The rest of the island is black only while the glass opens or closes,
+    /// so the last frames of a collapse match the resting black.
+    static func restingOpacity(openness: Double) -> Double {
+        openness.isFinite ? 1 - min(1, max(0, openness)) : 1
     }
 }
 
@@ -109,7 +93,16 @@ enum NotchGlassContrast {
     /// Increase Contrast lays a more opaque tint of the surface's own tone
     /// over the glass, so content reads against any wallpaper.
     static func surfaceTintOpacity(increasedContrast: Bool) -> Double { increasedContrast ? 0.55 : 0 }
-    static func tileTintOpacity(increasedContrast: Bool) -> Double { increasedContrast ? 0.35 : 0 }
+    /// Apple's guidance for clear glass over bright content: a light dimming
+    /// of its own, so a tile's text reads over a white window. Regular has
+    /// its own; only Increase Contrast adds to it.
+    static func tileTintOpacity(increasedContrast: Bool, style: NotchGlassStyle = .regular) -> Double {
+        if increasedContrast { return style == .clear ? 0.5 : 0.35 }
+        return style == .clear ? 0.3 : 0
+    }
+    static let haloRadius: CGFloat = 2.5
+    /// The halo behind glyphs on the glass, in the tone opposite the ink.
+    static func haloOpacity(increasedContrast: Bool) -> Double { increasedContrast ? 0.85 : 0.5 }
     /// The outline every tile and button on the glass carries.
     static func strokeOpacity(increasedContrast: Bool, selected: Bool = false) -> Double {
         increasedContrast ? (selected ? 0.75 : 0.5) : 0

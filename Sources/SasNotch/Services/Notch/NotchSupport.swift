@@ -2300,6 +2300,9 @@ struct NotchGeometry: Equatable {
     /// and below. The line is drawn inside the island's edge, so an island
     /// that only covers the camera would hide it behind the housing.
     let outlineRoom: CGFloat
+    /// The physical camera housing, before any size chosen in Settings;
+    /// zero on a display without one.
+    let physicalCutout: CGSize
     private let capsuleWidthFit: CGFloat
     var compactSideRoom: CGFloat?
     var quickAccessBottomInset: CGFloat = 0
@@ -2333,6 +2336,7 @@ struct NotchGeometry: Equatable {
         self.customHeight = NotchSize.clamped(customHeight, to: NotchSize.heightRange, fallback: NotchSize.defaultHeight)
         let barHeight = menuBarHeight.isFinite ? min(64, max(16, menuBarHeight)) : 24
         isNotched = safeAreaTop.isFinite && safeAreaTop > 0 && cameraWidth.isFinite && cameraWidth > 0
+        physicalCutout = isNotched ? CGSize(width: cameraWidth, height: safeAreaTop) : .zero
         // Only a physical camera has an outline to match; a simulated one follows the bar.
         let fit = isNotched ? cameraFit : .zero
         // A capsule replaces only a simulated cutout. It is as wide as the

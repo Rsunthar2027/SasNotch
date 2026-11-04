@@ -272,20 +272,24 @@ struct NotchArtwork: View {
     /// A player that sends no cover, as Firefox and Zen do, shows its own
     /// icon in its place, so the song still says where it plays.
     var source: RadialNowPlayingSnapshot? = nil
+    @Environment(\.notchGlassSurface) private var glassSurface
+
+    /// Nothing solid on the glass; the black island keeps its black well.
+    private var well: Color { glassSurface ? Color.primary.opacity(0.08) : .black }
 
     var body: some View {
         Group {
             if let image {
                 Image(nsImage: image).resizable().scaledToFill()
             } else if let icon = source.flatMap(RadialNowPlayingApplication.icon(for:)) {
-                Color.black.overlay {
+                well.overlay {
                     Image(nsImage: icon).resizable().interpolation(.high).scaledToFit().padding(size * 0.14)
                 }
             } else {
-                Color.black.overlay {
+                well.overlay {
                     Image(systemName: "music.note")
                         .font(.system(size: size * 0.3, weight: .light))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(glassSurface ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.45)))
                 }
             }
         }
@@ -495,9 +499,9 @@ final class NotchBackdropPresentation: ObservableObject {
     /// The camera strip's height in points, which the translucent background
     /// keeps black at every island height.
     @Published var stripHeight: CGFloat = 0
-    /// The part of that strip Liquid Glass keeps black: the camera housing's,
-    /// on a display that has one.
-    @Published var seamHeight: CGFloat = 0
+    /// What Liquid Glass keeps black: the camera housing, on a display that
+    /// has one.
+    @Published var seamSize = CGSize.zero
     @Published private(set) var fade = NotchGlassFade.open
     /// The menu bar a floating capsule leaves below itself, part of the
     /// surface height a fade is planned in.
@@ -550,7 +554,7 @@ struct NotchWindowBackground: View {
 
 /// The open island's surface. On macOS 26 with Liquid Glass it is Apple's own
 /// glass in the island's shape, lensing and lighting what lies behind it,
-/// with black kept only over the camera housing. Otherwise it is the frosted
+/// with black only in the camera housing's own rect. Otherwise it is the frosted
 /// blur or plain black, both dark.
 struct NotchSurfaceBackground: View {
     @ObservedObject var presentation: NotchBackdropPresentation
@@ -614,16 +618,17 @@ struct NotchSurfaceBackground: View {
     }
 #endif
 
-    /// Black over the physical camera, so the open island meets the housing
-    /// as the resting one does, released just below it. While the glass
-    /// opens or closes the rest stays dark with the resting black.
+    /// Black over the physical camera only, so the glass meets the housing at
+    /// its edge. While the glass opens or closes the rest stays dark with the
+    /// resting black.
     private var seam: some View {
-        let stops = NotchGlassSeam.stops(height: presentation.contourBottom, seamHeight: presentation.seamHeight,
-                                         openness: presentation.openness)
-            .map { Gradient.Stop(color: .black.opacity($0.opacity), location: $0.location) }
-        return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
-            .frame(height: presentation.contourBottom)
-            .frame(maxHeight: .infinity, alignment: .top)
+        ZStack(alignment: .top) {
+            Color.black.opacity(NotchGlassSeam.restingOpacity(openness: presentation.openness))
+            UnevenRoundedRectangle(bottomLeadingRadius: NotchGlassSeam.cornerRadius,
+                                   bottomTrailingRadius: NotchGlassSeam.cornerRadius, style: .continuous)
+                .fill(.black)
+                .frame(width: presentation.seamSize.width, height: presentation.seamSize.height)
+        }
     }
 }
 

@@ -217,6 +217,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             #if SASNOTCH_DEVELOPMENT
+            // `--preview-island [module]`: opens the island on that page and pins
+            // it, so its surface can be looked at without a pointer on the notch.
+            if let flag = CommandLine.arguments.firstIndex(of: "--preview-island") {
+                let page = CommandLine.arguments.dropFirst(flag + 1).first.flatMap(NotchModule.init(rawValue:))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    NotchService.shared.open(page, pinned: true, takeFocus: false, feedback: false)
+                }
+            }
             if CommandLine.arguments.contains("--preview-notch-tour") {
                 self.showUpdateHighlights(isReview: true)
                 return

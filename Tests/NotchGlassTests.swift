@@ -17,25 +17,25 @@ enum NotchGlassTests {
     }
 
     private static func style(_ suite: TestSuite) {
-        suite.expect(Defaults.registeredDefaults[DefaultsKey.notchGlassStyle] as? String == NotchGlassStyle.regular.rawValue
+        suite.expect(Defaults.registeredDefaults[DefaultsKey.notchGlassStyle] as? String == NotchGlassStyle.clear.rawValue
                      && SettingsBackupSupport.exportKeys().contains(DefaultsKey.notchGlassStyle),
                      "the island's glass starts Regular and its style travels with settings backups")
-        suite.expect(NotchGlassStyle.fallback == .regular && NotchGlassStyle.allCases == [.regular, .clear],
-                     "the choice is Regular, the default, or Clear")
+        suite.expect(NotchGlassStyle.fallback == .clear && NotchGlassStyle.allCases == [.regular, .clear],
+                     "the choice is Clear, the default, or Regular")
         suite.expect(NotchGlassStyle.sanitized("clear") == .clear && NotchGlassStyle.sanitized("regular") == .regular,
                      "a stored style reads back as itself")
         for raw in [nil, "", "Clear", "REGULAR", "frosted", "identity"] {
-            suite.expect(NotchGlassStyle.sanitized(raw) == .regular,
+            suite.expect(NotchGlassStyle.sanitized(raw) == .clear,
                          "an unknown stored style draws the default glass: \(raw ?? "nil")")
         }
         let domain = "sasnotch.tests.glass-style.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: domain)!
         defer { defaults.removePersistentDomain(forName: domain) }
-        suite.expect(NotchGlassStyle.stored(in: defaults) == .regular, "nothing stored reads as the default")
-        defaults.set("clear", forKey: DefaultsKey.notchGlassStyle)
-        suite.expect(NotchGlassStyle.stored(in: defaults) == .clear, "a stored choice is what the island draws")
+        suite.expect(NotchGlassStyle.stored(in: defaults) == .clear, "nothing stored reads as the default")
+        defaults.set("regular", forKey: DefaultsKey.notchGlassStyle)
+        suite.expect(NotchGlassStyle.stored(in: defaults) == .regular, "a stored choice is what the island draws")
         defaults.set("mirror", forKey: DefaultsKey.notchGlassStyle)
-        suite.expect(NotchGlassStyle.stored(in: defaults) == .regular, "a hand-edited value falls back")
+        suite.expect(NotchGlassStyle.stored(in: defaults) == .clear, "a hand-edited value falls back")
         suite.expect(NotchGlassStyle.regular.title == "Regular" && NotchGlassStyle.clear.title == "Clear"
                      && NotchGlassText.style == "Glass style"
                      && NotchGlassText.requiresMacOS26 == "Liquid Glass requires macOS 26",
@@ -65,41 +65,29 @@ enum NotchGlassTests {
     }
 
     private static func seam(_ suite: TestSuite) {
-        suite.expect(NotchGlassSeam.height(stripHeight: 37, isNotched: true, floats: false) == 37,
-                     "a camera housing keeps its strip black")
-        suite.expect(NotchGlassSeam.height(stripHeight: 24, isNotched: false, floats: false) == 0
-                     && NotchGlassSeam.height(stripHeight: 24, isNotched: true, floats: true) == 0
-                     && NotchGlassSeam.height(stripHeight: .nan, isNotched: true, floats: false) == 0,
+        let housing = CGSize(width: 180, height: 37)
+        suite.expect(NotchGlassSeam.size(cutout: housing, floats: false) == housing,
+                     "the black is the camera housing's rect")
+        suite.expect(NotchGlassSeam.size(cutout: .zero, floats: false) == .zero
+                     && NotchGlassSeam.size(cutout: housing, floats: true) == .zero
+                     && NotchGlassSeam.size(cutout: CGSize(width: CGFloat.nan, height: 37), floats: false) == .zero,
                      "with no housing to hide the island is glass from its top edge")
-        let strip: CGFloat = 37
-        suite.expect(NotchGlassSeam.opacity(atDepth: 0, seamHeight: strip, openness: 1) == 1
-                     && NotchGlassSeam.opacity(atDepth: strip, seamHeight: strip, openness: 1) == 1,
-                     "the camera strip stays solid black on open glass")
-        suite.expect(NotchGlassSeam.opacity(atDepth: strip + NotchGlassSeam.rampLength, seamHeight: strip, openness: 1) == 0,
-                     "below the seam the glass carries no shade")
-        suite.expect(NotchGlassSeam.opacity(atDepth: 200, seamHeight: strip, openness: 0) == 1,
-                     "a glass still closed matches the resting black")
-        suite.expect(NotchGlassSeam.opacity(atDepth: 200, seamHeight: strip, openness: .nan) == 1,
-                     "an unreadable fade stays black")
-        suite.expect(NotchGlassSeam.opacity(atDepth: 0, seamHeight: 0, openness: 1) == 0
-                     && NotchGlassSeam.opacity(atDepth: 0, seamHeight: 0, openness: 0.25) == 0.75,
-                     "with no seam only the resting black is left, as the glass opens")
-        let midway = NotchGlassSeam.opacity(atDepth: strip + NotchGlassSeam.rampLength / 2, seamHeight: strip, openness: 1)
-        suite.expect(midway > 0 && midway < 1, "the seam eases out rather than ending in a line")
-        suite.expect(strip + NotchGlassSeam.rampLength <= strip + 10 + 1,
-                     "a page below the camera's row starts on clear glass")
-        let stops = NotchGlassSeam.stops(height: 260, seamHeight: strip, openness: 1)
-        suite.expect(stops.first?.location == 0 && stops.first?.opacity == 1 && stops.last?.location == 1
-                     && stops.last?.opacity == 0,
-                     "the stops run the island's height, from black to clear")
-        suite.expect(zip(stops, stops.dropFirst()).allSatisfy { $0.location <= $1.location && $0.opacity >= $1.opacity },
-                     "the stops run in order and never darken on the way down")
-        let shallow = NotchGlassSeam.stops(height: 20, seamHeight: strip, openness: 1)
-        suite.expect(!shallow.isEmpty && shallow.allSatisfy { $0.location >= 0 && $0.location <= 1 && $0.opacity == 1 },
-                     "an island no taller than its strip is all seam")
-        suite.expect(NotchGlassSeam.stops(height: 0, seamHeight: strip, openness: 1).allSatisfy { $0.opacity == 1 }
-                     && NotchGlassSeam.stops(height: .nan, seamHeight: strip, openness: 1).allSatisfy { $0.opacity == 1 },
-                     "no height to draw in leaves it black")
+        let notched = NotchGeometry(screen: CGRect(x: 0, y: 0, width: 1512, height: 982), safeAreaTop: 37,
+                                    cameraWidth: 180, menuBarHeight: 37, cameraFit: NotchCameraFit(width: 10, height: 6))
+        suite.expect(notched.physicalCutout == housing && notched.cameraWidth > housing.width,
+                     "a wider resting island in Settings leaves the black at the hardware's size")
+        let plain = NotchGeometry(screen: CGRect(x: 0, y: 0, width: 1920, height: 1080), safeAreaTop: 0,
+                                  cameraWidth: 0, menuBarHeight: 24)
+        suite.expect(plain.physicalCutout == .zero, "a display without a camera housing has no black")
+        suite.expect(NotchGlassSeam.restingOpacity(openness: 1) == 0,
+                     "open glass has no black outside the housing")
+        suite.expect(NotchGlassSeam.restingOpacity(openness: 0) == 1 && NotchGlassSeam.restingOpacity(openness: .nan) == 1,
+                     "a glass still closed, or an unreadable fade, matches the resting black")
+        suite.expect(NotchGlassSeam.restingOpacity(openness: 0.25) == 0.75, "the black lets go as the glass opens")
+        let components = (try? String(contentsOfFile: "Sources/SasNotch/UI/Notch/NotchComponents.swift", encoding: .utf8)) ?? ""
+        suite.expect(components.contains("UnevenRoundedRectangle(bottomLeadingRadius: NotchGlassSeam.cornerRadius")
+                     && !components.contains("NotchGlassSeam.stops"),
+                     "no gradient runs from the housing into the body")
     }
 
     private static func contrast(_ suite: TestSuite) {
@@ -126,7 +114,7 @@ enum NotchGlassTests {
         let view = source("Sources/SasNotch/UI/Notch/NotchView.swift")
         suite.expect(components.contains(".glassEffect(surfaceGlass, in: shape)") && !components.contains("func shade("),
                      "the island's surface is Apple's glass in its own shape, with no shade laid over it")
-        suite.expect(glass.contains("Glass.regular.tint(tinted).interactive(interactive && !reduceMotion)")
+        suite.expect(glass.contains(".glass.tint(tinted).interactive(interactive && !reduceMotion)")
                      && glass.contains("GlassEffectContainer(spacing: spacing)")
                      && glass.contains(".glassEffectID(id, in: namespace)")
                      && glass.contains(".glassEffectUnion(id: union, namespace: namespace)"),

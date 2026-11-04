@@ -171,6 +171,7 @@ struct NotchGlassBackground<S: InsettableShape>: ViewModifier {
     var selected = false
     var glassID: String? = nil
     var unionID: String? = nil
+    @AppStorage(DefaultsKey.notchGlassStyle) private var glassStyle = NotchGlassStyle.fallback.rawValue
     @Environment(\.notchGlassSurface) private var glassSurface
     @Environment(\.notchGlassNamespace) private var namespace
     @Environment(\.notchGlassUnion) private var environmentUnion
@@ -201,10 +202,11 @@ struct NotchGlassBackground<S: InsettableShape>: ViewModifier {
     @available(macOS 26, *)
     private var glass: Glass {
         let tone: Color = scheme == .dark ? .black : .white
-        let contrastTint = NotchGlassContrast.tileTintOpacity(increasedContrast: increased)
-        let tinted = tint ?? (contrastTint > 0 ? tone.opacity(contrastTint) : nil)
+        let style = NotchGlassStyle.sanitized(glassStyle)
+        let dimming = NotchGlassContrast.tileTintOpacity(increasedContrast: increased, style: style)
+        let tinted = tint ?? (dimming > 0 ? tone.opacity(dimming) : nil)
         // Reduce Motion keeps the lens still under the pointer.
-        return Glass.regular.tint(tinted).interactive(interactive && !reduceMotion)
+        return style.glass.tint(tinted).interactive(interactive && !reduceMotion)
     }
 #endif
 

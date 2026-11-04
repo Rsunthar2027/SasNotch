@@ -40,6 +40,11 @@ struct NotchView: View {
             // White is right on black and frosted. On Liquid Glass the content
             // takes the system's own label styles, which the glass lights.
             .foregroundStyle(ink)
+            // Clear glass has nothing of its own to set text against, so glyphs
+            // carry a small halo in the opposite tone, as desktop labels do. It
+            // keeps white ink readable over a white window without dimming
+            // the whole island.
+            .shadow(color: usesGlassSurface ? halo : .clear, radius: usesGlassSurface ? NotchGlassContrast.haloRadius : 0)
             // The window server leaves SwiftUI content that ignores hit tests
             // out of its own hit test unless it is fully opaque. The backdrop
             // ignores them (allowsHitTesting(false) in NotchSurfaceBackground),
@@ -69,6 +74,7 @@ struct NotchView: View {
             .environment(\.notchTileRadius, NotchGlassGeometry.tileRadius(
                 surfaceRadius: NotchLayout.surfaceRadius(height: service.expandedSize.height)))
             .tint(usesGlassSurface ? Color.primary : .white)
+            .symbolRenderingMode(usesGlassSurface ? .hierarchical : nil)
             .accessibilityIdentifier("notch.surface")
     }
 
@@ -77,6 +83,10 @@ struct NotchView: View {
     private var surfaceScheme: ColorScheme { usesGlassSurface ? appearance.scheme : .dark }
 
     private var ink: AnyShapeStyle { usesGlassSurface ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.white) }
+
+    private var halo: Color {
+        surfaceScheme.notchPaper.opacity(NotchGlassContrast.haloOpacity(increasedContrast: contrast == .increased))
+    }
 
     private var usesGlassSurface: Bool {
 #if compiler(>=6.2)
